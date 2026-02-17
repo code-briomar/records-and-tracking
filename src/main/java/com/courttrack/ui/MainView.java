@@ -103,16 +103,16 @@ public class MainView {
             -fx-background-color: %s;
             -fx-background-radius: 8;
         """, tm.accentBlue()));
-        Label logoText = new Label("CR");
+        Label logoText = new Label("R&T");
         logoText.setFont(Font.font("System", FontWeight.BOLD, 14));
         logoText.setTextFill(Color.WHITE);
         logoIcon.getChildren().add(logoText);
 
         titleBox = new VBox(0);
-        Label appTitle = new Label("Court Records");
+        Label appTitle = new Label("Kilungu Law Courts");
         appTitle.setFont(Font.font("System", FontWeight.BOLD, 14));
         appTitle.setTextFill(Color.web(tm.sidebarText()));
-        Label appSubtitle = new Label("Tracking System");
+        Label appSubtitle = new Label("Records & Tracking");
         appSubtitle.setFont(Font.font("System", 11));
         appSubtitle.setTextFill(Color.web(tm.sidebarMuted()));
         titleBox.getChildren().addAll(appTitle, appSubtitle);
@@ -131,7 +131,7 @@ public class MainView {
         navSection.getChildren().addAll(
             createNavButton("Dashboard", "dashboard", Feather.HOME),
             createNavButton("Cases", "cases", Feather.FOLDER),
-            createNavButton("Persons", "offenders", Feather.USERS)
+            createNavButton("Offenders", "offenders", Feather.USERS)
         );
 
         Region spacer = new Region();
