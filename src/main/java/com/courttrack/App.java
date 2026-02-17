@@ -21,10 +21,10 @@ public class App extends Application {
 
         showLogin();
 
-        stage.setTitle("Court Records & Tracking System - Judiciary of Kenya");
+        stage.setTitle("Records & Tracking System - Kilungu Law Courts");
         stage.setMinWidth(1000);
         stage.setMinHeight(650);
-        stage.setWidth(1200);
+        stage.setWidth(1200); 
         stage.setHeight(800);
         stage.show();
     }
