@@ -18,11 +18,13 @@ import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.format.DateTimeFormatter;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public class CaseListView {
     private final VBox root;
     private final CaseDao caseDao = new CaseDao();
     private final ThemeManager tm = ThemeManager.getInstance();
+    private final Consumer<CourtCase> onViewDetail;
     private TableView<CourtCase> table;
     private ObservableList<CourtCase> caseList;
     private TextField searchField;
@@ -31,7 +33,8 @@ public class CaseListView {
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
-    public CaseListView() {
+    public CaseListView(Consumer<CourtCase> onViewDetail) {
+        this.onViewDetail = onViewDetail;
         root = new VBox(20);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
@@ -282,125 +285,9 @@ public class CaseListView {
     }
 
     private void handleView(CourtCase c) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Case Details");
-        dialog.setHeaderText(null);
-
-        VBox content = new VBox(0);
-        content.setPrefWidth(500);
-
-        // Header: case number + title + badges
-        VBox header = new VBox(4);
-        header.setPadding(new Insets(8, 24, 12, 24));
-
-        Label numberLabel = new Label(c.getCaseNumber());
-        numberLabel.setFont(Font.font("System", FontWeight.BOLD, 20));
-
-        if (c.getCaseTitle() != null && !c.getCaseTitle().isBlank()) {
-            Label titleLabel = new Label(c.getCaseTitle());
-            titleLabel.setFont(Font.font("System", 14));
-            titleLabel.getStyleClass().add("text-muted");
-            header.getChildren().addAll(numberLabel, titleLabel);
-        } else {
-            header.getChildren().add(numberLabel);
+        if (onViewDetail != null) {
+            onViewDetail.accept(c);
         }
-
-        HBox badges = new HBox(8);
-        badges.setPadding(new Insets(6, 0, 0, 0));
-        if (c.getCaseCategory() != null) {
-            Label catBadge = new Label(c.getCaseCategory());
-            catBadge.setPadding(new Insets(3, 10, 3, 10));
-            catBadge.setFont(Font.font("System", 11));
-            String catColor = switch (c.getCaseCategory()) { case "Criminal" -> tm.badgeCriminalText(); case "Traffic" -> tm.badgeTrafficText(); case "Civil" -> tm.badgeCivilText(); default -> "#888"; };
-            String catBg = switch (c.getCaseCategory()) { case "Criminal" -> tm.badgeCriminalBg(); case "Traffic" -> tm.badgeTrafficBg(); case "Civil" -> tm.badgeCivilBg(); default -> "#eee"; };
-            catBadge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", catBg, catColor));
-            badges.getChildren().add(catBadge);
-        }
-        if (c.getCaseStatus() != null) {
-            Label statusBadge = new Label(c.getCaseStatus());
-            statusBadge.setPadding(new Insets(3, 10, 3, 10));
-            statusBadge.setFont(Font.font("System", 11));
-            if ("OPEN".equals(c.getCaseStatus())) {
-                statusBadge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeOpenBg(), tm.badgeOpenText()));
-            } else {
-                statusBadge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeClosedBg(), tm.badgeClosedText()));
-            }
-            badges.getChildren().add(statusBadge);
-        }
-        header.getChildren().add(badges);
-        content.getChildren().add(header);
-
-        // Separator
-        Separator sep1 = new Separator();
-        sep1.setPadding(new Insets(0, 24, 0, 24));
-        content.getChildren().add(sep1);
-
-        // Section: Case Information
-        FontIcon caseIcon = new FontIcon(Feather.BRIEFCASE);
-        caseIcon.setIconSize(14);
-        caseIcon.setIconColor(Color.web(tm.accentBlue()));
-        Label caseSecLabel = new Label("Case Information");
-        caseSecLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        HBox caseSec = new HBox(8, caseIcon, caseSecLabel);
-        caseSec.setAlignment(Pos.CENTER_LEFT);
-        caseSec.setPadding(new Insets(14, 24, 6, 24));
-        content.getChildren().add(caseSec);
-
-        GridPane infoGrid = new GridPane();
-        infoGrid.setHgap(20);
-        infoGrid.setVgap(8);
-        infoGrid.setPadding(new Insets(4, 24, 12, 24));
-
-        int row = 0;
-        addDetailRow(infoGrid, row++, "Court", c.getCourtId() != null ? c.getCourtId() : "\u2014");
-        addDetailRow(infoGrid, row++, "Filing Date", c.getFilingDate() != null ? c.getFilingDate().format(DATE_FMT) : "\u2014");
-        content.getChildren().add(infoGrid);
-
-        // Separator
-        Separator sep2 = new Separator();
-        sep2.setPadding(new Insets(0, 24, 0, 24));
-        content.getChildren().add(sep2);
-
-        // Section: Charge Details
-        FontIcon chargeIcon = new FontIcon(Feather.FILE_TEXT);
-        chargeIcon.setIconSize(14);
-        chargeIcon.setIconColor(Color.web(tm.accentOrange()));
-        Label chargeSecLabel = new Label("Charge Details");
-        chargeSecLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        HBox chargeSec = new HBox(8, chargeIcon, chargeSecLabel);
-        chargeSec.setAlignment(Pos.CENTER_LEFT);
-        chargeSec.setPadding(new Insets(14, 24, 6, 24));
-        content.getChildren().add(chargeSec);
-
-        GridPane chargeGrid = new GridPane();
-        chargeGrid.setHgap(20);
-        chargeGrid.setVgap(8);
-        chargeGrid.setPadding(new Insets(4, 24, 16, 24));
-
-        int crow = 0;
-        addDetailRow(chargeGrid, crow++, "Particulars", c.getChargeParticulars() != null ? c.getChargeParticulars() : "\u2014");
-        addDetailRow(chargeGrid, crow++, "Plea", c.getChargePlea() != null ? c.getChargePlea() : "\u2014");
-        String verdictDisplay = c.getChargeVerdict() != null ? c.getChargeVerdict().replace("_", " ") : "Pending";
-        addDetailRow(chargeGrid, crow++, "Verdict", verdictDisplay);
-        content.getChildren().add(chargeGrid);
-
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.showAndWait();
-    }
-
-    private void addDetailRow(GridPane grid, int row, String label, String value) {
-        Label keyLabel = new Label(label);
-        keyLabel.setFont(Font.font("System", 12));
-        keyLabel.getStyleClass().add("text-muted");
-        keyLabel.setMinWidth(90);
-
-        Label valLabel = new Label(value);
-        valLabel.setFont(Font.font("System", 13));
-        valLabel.setWrapText(true);
-
-        grid.add(keyLabel, 0, row);
-        grid.add(valLabel, 1, row);
     }
 
     private void handleEdit(CourtCase c) {

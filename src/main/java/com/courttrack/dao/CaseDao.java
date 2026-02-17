@@ -116,8 +116,11 @@ public class CaseDao {
 
     public void insert(CourtCase c) {
         String sql = """
-            INSERT INTO court_case (case_id, case_number, case_title, court_id, filing_date, case_status, case_category)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO court_case (case_id, case_number, case_title, court_id, court_name, filing_date,
+                case_status, case_category, case_type, priority, description, date_of_judgment,
+                sentence, mitigation_notes, prosecution_counsel, appeal_status, location_of_offence,
+                evidence_summary, hearing_dates, court_assistant)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -125,9 +128,22 @@ public class CaseDao {
             ps.setString(2, c.getCaseNumber());
             ps.setString(3, c.getCaseTitle());
             ps.setString(4, c.getCourtId());
-            ps.setString(5, c.getFilingDate().toString());
-            ps.setString(6, c.getCaseStatus());
-            ps.setString(7, c.getCaseCategory());
+            ps.setString(5, c.getCourtName());
+            ps.setString(6, c.getFilingDate() != null ? c.getFilingDate().toString() : null);
+            ps.setString(7, c.getCaseStatus());
+            ps.setString(8, c.getCaseCategory());
+            ps.setString(9, c.getCaseType());
+            ps.setString(10, c.getPriority());
+            ps.setString(11, c.getDescription());
+            ps.setString(12, c.getDateOfJudgment() != null ? c.getDateOfJudgment().toString() : null);
+            ps.setString(13, c.getSentence());
+            ps.setString(14, c.getMitigationNotes());
+            ps.setString(15, c.getProsecutionCounsel());
+            ps.setString(16, c.getAppealStatus());
+            ps.setString(17, c.getLocationOfOffence());
+            ps.setString(18, c.getEvidenceSummary());
+            ps.setString(19, c.getHearingDates());
+            ps.setString(20, c.getCourtAssistant());
             ps.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -136,8 +152,12 @@ public class CaseDao {
 
     public void update(CourtCase c) {
         String sql = """
-            UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, filing_date = ?,
-            case_status = ?, case_category = ?, updated_at = datetime('now')
+            UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, court_name = ?,
+            filing_date = ?, case_status = ?, case_category = ?, case_type = ?, priority = ?,
+            description = ?, date_of_judgment = ?, sentence = ?, mitigation_notes = ?,
+            prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?,
+            evidence_summary = ?, hearing_dates = ?, court_assistant = ?,
+            updated_at = datetime('now')
             WHERE case_id = ?
         """;
         try (Connection conn = db.getConnection();
@@ -145,10 +165,23 @@ public class CaseDao {
             ps.setString(1, c.getCaseNumber());
             ps.setString(2, c.getCaseTitle());
             ps.setString(3, c.getCourtId());
-            ps.setString(4, c.getFilingDate().toString());
-            ps.setString(5, c.getCaseStatus());
-            ps.setString(6, c.getCaseCategory());
-            ps.setString(7, c.getCaseId());
+            ps.setString(4, c.getCourtName());
+            ps.setString(5, c.getFilingDate() != null ? c.getFilingDate().toString() : null);
+            ps.setString(6, c.getCaseStatus());
+            ps.setString(7, c.getCaseCategory());
+            ps.setString(8, c.getCaseType());
+            ps.setString(9, c.getPriority());
+            ps.setString(10, c.getDescription());
+            ps.setString(11, c.getDateOfJudgment() != null ? c.getDateOfJudgment().toString() : null);
+            ps.setString(12, c.getSentence());
+            ps.setString(13, c.getMitigationNotes());
+            ps.setString(14, c.getProsecutionCounsel());
+            ps.setString(15, c.getAppealStatus());
+            ps.setString(16, c.getLocationOfOffence());
+            ps.setString(17, c.getEvidenceSummary());
+            ps.setString(18, c.getHearingDates());
+            ps.setString(19, c.getCourtAssistant());
+            ps.setString(20, c.getCaseId());
             ps.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
@@ -306,12 +339,28 @@ public class CaseDao {
         c.setCaseNumber(rs.getString("case_number"));
         c.setCaseTitle(rs.getString("case_title"));
         c.setCourtId(rs.getString("court_id"));
+        c.setCourtName(rs.getString("court_name"));
         String filingDate = rs.getString("filing_date");
         if (filingDate != null) {
             c.setFilingDate(LocalDate.parse(filingDate));
         }
         c.setCaseStatus(rs.getString("case_status"));
         c.setCaseCategory(rs.getString("case_category"));
+        c.setCaseType(rs.getString("case_type"));
+        c.setPriority(rs.getString("priority"));
+        c.setDescription(rs.getString("description"));
+        String judgmentDate = rs.getString("date_of_judgment");
+        if (judgmentDate != null && !judgmentDate.isBlank()) {
+            c.setDateOfJudgment(LocalDate.parse(judgmentDate));
+        }
+        c.setSentence(rs.getString("sentence"));
+        c.setMitigationNotes(rs.getString("mitigation_notes"));
+        c.setProsecutionCounsel(rs.getString("prosecution_counsel"));
+        c.setAppealStatus(rs.getString("appeal_status"));
+        c.setLocationOfOffence(rs.getString("location_of_offence"));
+        c.setEvidenceSummary(rs.getString("evidence_summary"));
+        c.setHearingDates(rs.getString("hearing_dates"));
+        c.setCourtAssistant(rs.getString("court_assistant"));
         c.setDeleted(rs.getInt("is_deleted") == 1);
         c.setChargeParticulars(rs.getString("charge_particulars"));
         c.setChargeVerdict(rs.getString("charge_verdict"));

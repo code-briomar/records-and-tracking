@@ -1,5 +1,6 @@
 package com.courttrack.model;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 public class Charge {
@@ -11,9 +12,13 @@ public class Charge {
     private String plea;
     private String verdict;
     private String sentenceNotes;
+    private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     public Charge() {
         this.chargeId = UUID.randomUUID().toString();
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
     public String getChargeId() { return chargeId; }
@@ -39,4 +44,10 @@ public class Charge {
 
     public String getSentenceNotes() { return sentenceNotes; }
     public void setSentenceNotes(String sentenceNotes) { this.sentenceNotes = sentenceNotes; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

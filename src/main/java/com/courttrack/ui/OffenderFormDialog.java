@@ -12,6 +12,7 @@ import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.Modality;
 import javafx.util.StringConverter;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -50,6 +51,7 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
     public OffenderFormDialog(Person existing) {
         setTitle(existing == null ? "Add New Person" : "Edit Person");
         setHeaderText(null);
+        initModality(Modality.APPLICATION_MODAL);
 
         // --- Fields ---
         firstNameField = new TextField();

@@ -16,22 +16,26 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 
+import javafx.stage.Modality;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.LocalDate;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public class OffenderListView {
     private final VBox root;
     private final PersonDao personDao = new PersonDao();
     private final CaseDao caseDao = new CaseDao();
     private final ThemeManager tm = ThemeManager.getInstance();
+    private final Consumer<Person> onViewDetail;
     private TableView<Person> table;
     private ObservableList<Person> personList;
     private TextField searchField;
 
-    public OffenderListView() {
+    public OffenderListView(Consumer<Person> onViewDetail) {
+        this.onViewDetail = onViewDetail;
         root = new VBox(20);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
@@ -168,112 +172,9 @@ public class OffenderListView {
     }
 
     private void handleView(Person p) {
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.setTitle("Person Details");
-        dialog.setHeaderText(null);
-
-        VBox content = new VBox(0);
-        content.setPrefWidth(460);
-
-        // Header: full name + national ID
-        VBox header = new VBox(4);
-        header.setPadding(new Insets(8, 24, 12, 24));
-
-        Label nameLabel = new Label(p.getFullName());
-        nameLabel.setFont(Font.font("System", FontWeight.BOLD, 20));
-
-        if (p.getNationalId() != null && !p.getNationalId().isBlank()) {
-            Label idLabel = new Label("ID: " + p.getNationalId());
-            idLabel.setFont(Font.font("System", 13));
-            idLabel.getStyleClass().add("text-muted");
-            header.getChildren().addAll(nameLabel, idLabel);
-        } else {
-            header.getChildren().add(nameLabel);
+        if (onViewDetail != null) {
+            onViewDetail.accept(p);
         }
-
-        if (p.getGender() != null) {
-            Label genderBadge = new Label(p.getGender());
-            genderBadge.setPadding(new Insets(3, 10, 3, 10));
-            genderBadge.setFont(Font.font("System", 11));
-            genderBadge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;",
-                tm.badgeCivilBg(), tm.badgeCivilText()));
-            HBox badgeRow = new HBox(genderBadge);
-            badgeRow.setPadding(new Insets(6, 0, 0, 0));
-            header.getChildren().add(badgeRow);
-        }
-        content.getChildren().add(header);
-
-        Separator sep1 = new Separator();
-        sep1.setPadding(new Insets(0, 24, 0, 24));
-        content.getChildren().add(sep1);
-
-        // Section: Personal Information
-        FontIcon userIcon = new FontIcon(Feather.USER);
-        userIcon.setIconSize(14);
-        userIcon.setIconColor(Color.web(tm.accentBlue()));
-        Label personalSecLabel = new Label("Personal Information");
-        personalSecLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        HBox personalSec = new HBox(8, userIcon, personalSecLabel);
-        personalSec.setAlignment(Pos.CENTER_LEFT);
-        personalSec.setPadding(new Insets(14, 24, 6, 24));
-        content.getChildren().add(personalSec);
-
-        GridPane personalGrid = new GridPane();
-        personalGrid.setHgap(20);
-        personalGrid.setVgap(8);
-        personalGrid.setPadding(new Insets(4, 24, 12, 24));
-
-        int row = 0;
-        addDetailRow(personalGrid, row++, "First Name", or(p.getFirstName()));
-        addDetailRow(personalGrid, row++, "Last Name", or(p.getLastName()));
-        if (p.getOtherNames() != null && !p.getOtherNames().isBlank()) {
-            addDetailRow(personalGrid, row++, "Other Names", p.getOtherNames());
-        }
-        addDetailRow(personalGrid, row++, "Date of Birth", p.getDob() != null ? p.getDob().toString() : "\u2014");
-        content.getChildren().add(personalGrid);
-
-        Separator sep2 = new Separator();
-        sep2.setPadding(new Insets(0, 24, 0, 24));
-        content.getChildren().add(sep2);
-
-        // Section: Contact Details
-        FontIcon phoneIcon = new FontIcon(Feather.PHONE);
-        phoneIcon.setIconSize(14);
-        phoneIcon.setIconColor(Color.web(tm.accentGreen()));
-        Label contactSecLabel = new Label("Contact Details");
-        contactSecLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        HBox contactSec = new HBox(8, phoneIcon, contactSecLabel);
-        contactSec.setAlignment(Pos.CENTER_LEFT);
-        contactSec.setPadding(new Insets(14, 24, 6, 24));
-        content.getChildren().add(contactSec);
-
-        GridPane contactGrid = new GridPane();
-        contactGrid.setHgap(20);
-        contactGrid.setVgap(8);
-        contactGrid.setPadding(new Insets(4, 24, 16, 24));
-
-        int crow = 0;
-        addDetailRow(contactGrid, crow++, "Phone", or(p.getPhoneNumber()));
-        addDetailRow(contactGrid, crow++, "Email", or(p.getEmail()));
-        content.getChildren().add(contactGrid);
-
-        dialog.getDialogPane().setContent(content);
-        dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
-        dialog.showAndWait();
-    }
-
-    private void addDetailRow(GridPane grid, int row, String label, String value) {
-        Label keyLabel = new Label(label);
-        keyLabel.setFont(Font.font("System", 12));
-        keyLabel.getStyleClass().add("text-muted");
-        keyLabel.setMinWidth(90);
-
-        Label valLabel = new Label(value);
-        valLabel.setFont(Font.font("System", 13));
-        valLabel.setWrapText(true);
-
-        grid.add(keyLabel, 0, row);
-        grid.add(valLabel, 1, row);
     }
 
     private String or(String s) {
@@ -290,6 +191,7 @@ public class OffenderListView {
         Dialog<Boolean> confirm = new Dialog<>();
         confirm.setTitle("Confirm Deletion");
         confirm.setHeaderText(null);
+        confirm.initModality(Modality.APPLICATION_MODAL);
 
         VBox content = new VBox(12);
         content.setPadding(new Insets(16, 24, 8, 24));

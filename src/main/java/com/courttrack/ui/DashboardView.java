@@ -2,17 +2,25 @@ package com.courttrack.ui;
 
 import com.courttrack.dao.CaseDao;
 import com.courttrack.dao.PersonDao;
+import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.CourtCase;
+import com.courttrack.model.Person;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import org.kordamp.ikonli.feather.Feather;
+import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
+import java.util.function.Consumer;
 
 public class DashboardView {
     private final VBox root;
@@ -20,9 +28,16 @@ public class DashboardView {
     private final PersonDao personDao = new PersonDao();
     private final ThemeManager tm = ThemeManager.getInstance();
 
+    private final Runnable onNavigateCases;
+    private final Runnable onNavigatePersons;
+    private final Consumer<CourtCase> onViewCase;
+
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
-    public DashboardView() {
+    public DashboardView(Runnable onNavigateCases, Runnable onNavigatePersons, Consumer<CourtCase> onViewCase) {
+        this.onNavigateCases = onNavigateCases;
+        this.onNavigatePersons = onNavigatePersons;
+        this.onViewCase = onViewCase;
         root = new VBox(24);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
@@ -51,13 +66,26 @@ public class DashboardView {
             createStatCard("Persons on Record", String.valueOf(totalOffenders), tm.accentPurple())
         );
 
+        // --- Quick Actions ---
+        Label actionsTitle = new Label("Quick Actions");
+        actionsTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
+
+        HBox actionsRow = new HBox(14);
+        actionsRow.getChildren().addAll(
+            createActionCard("New Case", "File a new court case", Feather.PLUS_CIRCLE, tm.accentBlue(), this::handleNewCase),
+            createActionCard("Add Person", "Register a new person", Feather.USER_PLUS, tm.accentGreen(), this::handleNewPerson),
+            createActionCard("View Cases", "Browse all court cases", Feather.FOLDER, tm.accentOrange(), onNavigateCases),
+            createActionCard("View Persons", "Browse all persons", Feather.USERS, tm.accentPurple(), onNavigatePersons)
+        );
+
+        // --- Recent Cases ---
         Label recentTitle = new Label("Recent Cases");
         recentTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
 
         TableView<CourtCase> recentTable = createRecentCasesTable();
         VBox.setVgrow(recentTable, Priority.ALWAYS);
 
-        root.getChildren().addAll(titleBox, statsRow, recentTitle, recentTable);
+        root.getChildren().addAll(titleBox, statsRow, actionsTitle, actionsRow, recentTitle, recentTable);
     }
 
     private VBox createStatCard(String label, String value, String color) {
@@ -82,6 +110,76 @@ public class DashboardView {
         card.getChildren().addAll(accent, valueLabel, textLabel);
         HBox.setHgrow(card, Priority.ALWAYS);
         return card;
+    }
+
+    private VBox createActionCard(String title, String description, Feather icon, String color, Runnable action) {
+        VBox card = new VBox(10);
+        card.setPadding(new Insets(18));
+        card.setPrefWidth(200);
+        card.setMinHeight(120);
+        card.setAlignment(Pos.TOP_LEFT);
+        card.getStyleClass().add("bordered");
+        card.setStyle(card.getStyle() + "-fx-cursor: hand;");
+
+        StackPane iconCircle = new StackPane();
+        iconCircle.setMinSize(40, 40);
+        iconCircle.setMaxSize(40, 40);
+        iconCircle.setStyle(String.format(
+            "-fx-background-color: %s18; -fx-background-radius: 20;", color));
+
+        FontIcon fi = new FontIcon(icon);
+        fi.setIconSize(18);
+        fi.setIconColor(Color.web(color));
+        iconCircle.getChildren().add(fi);
+
+        Label titleLabel = new Label(title);
+        titleLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 14));
+
+        Label descLabel = new Label(description);
+        descLabel.setFont(Font.font("System", 12));
+        descLabel.getStyleClass().add("text-muted");
+        descLabel.setWrapText(true);
+
+        card.getChildren().addAll(iconCircle, titleLabel, descLabel);
+        HBox.setHgrow(card, Priority.ALWAYS);
+
+        // Hover effect
+        card.setOnMouseEntered(e -> card.setStyle(String.format(
+            "-fx-cursor: hand; -fx-background-color: %s08; -fx-border-color: %s;",
+            color, color)));
+        card.setOnMouseExited(e -> card.setStyle("-fx-cursor: hand;"));
+        card.setOnMouseClicked(e -> action.run());
+
+        return card;
+    }
+
+    private void handleNewCase() {
+        CaseFormDialog dialog = new CaseFormDialog(null);
+        Optional<CourtCase> result = dialog.showAndWait();
+        result.ifPresent(c -> {
+            caseDao.insert(c);
+            caseDao.upsertFirstCharge(c.getCaseId(), c.getChargeParticulars(), c.getChargePlea(), c.getChargeVerdict());
+            // Refresh dashboard
+            root.getChildren().clear();
+            buildUI();
+        });
+    }
+
+    private void handleNewPerson() {
+        OffenderFormDialog dialog = new OffenderFormDialog(null);
+        Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
+        result.ifPresent(link -> {
+            Person p = link.getPerson();
+            personDao.insert(p);
+            CaseParticipant cp = new CaseParticipant();
+            cp.setCaseId(link.getCourtCase().getCaseId());
+            cp.setPersonId(p.getPersonId());
+            cp.setRoleType("Accused");
+            caseDao.addParticipant(cp);
+            // Refresh dashboard
+            root.getChildren().clear();
+            buildUI();
+        });
     }
 
     @SuppressWarnings("unchecked")
@@ -122,6 +220,22 @@ public class DashboardView {
         TableColumn<CourtCase, String> catCol = new TableColumn<>("Category");
         catCol.setPrefWidth(100);
         catCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getCaseCategory()));
+        catCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(String cat, boolean empty) {
+                super.updateItem(cat, empty);
+                if (empty || cat == null) { setGraphic(null); } else {
+                    Label badge = new Label(cat);
+                    badge.setPadding(new Insets(3, 10, 3, 10));
+                    badge.setFont(Font.font("System", 11));
+                    String color = switch (cat) { case "Criminal" -> tm.badgeCriminalText(); case "Traffic" -> tm.badgeTrafficText(); case "Civil" -> tm.badgeCivilText(); default -> "#888"; };
+                    String bg = switch (cat) { case "Criminal" -> tm.badgeCriminalBg(); case "Traffic" -> tm.badgeTrafficBg(); case "Civil" -> tm.badgeCivilBg(); default -> "#eee"; };
+                    badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", bg, color));
+                    setGraphic(badge);
+                }
+                setText(null);
+            }
+        });
 
         TableColumn<CourtCase, String> statusCol = new TableColumn<>("Status");
         statusCol.setPrefWidth(90);
@@ -160,11 +274,69 @@ public class DashboardView {
             cd.getValue().getFilingDate() != null ? cd.getValue().getFilingDate().format(DATE_FMT) : ""
         ));
 
-        table.getColumns().addAll(caseCol, catCol, statusCol, verdictCol, dateCol);
+        // View button column
+        TableColumn<CourtCase, Void> actionsCol = new TableColumn<>();
+        actionsCol.setPrefWidth(70);
+        actionsCol.setSortable(false);
+        actionsCol.setCellFactory(col -> new TableCell<>() {
+            private final Button viewBtn = createViewButton();
+            {
+                viewBtn.setOnAction(e -> {
+                    CourtCase c = getTableView().getItems().get(getIndex());
+                    if (onViewCase != null) onViewCase.accept(c);
+                });
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                setGraphic(empty ? null : viewBtn);
+            }
+        });
+
+        table.getColumns().addAll(caseCol, catCol, statusCol, verdictCol, dateCol, actionsCol);
         table.setItems(FXCollections.observableArrayList(caseDao.findRecent(5)));
         table.setPlaceholder(new Label("No cases found"));
 
+        // Double-click to view
+        table.setRowFactory(tv -> {
+            TableRow<CourtCase> row = new TableRow<>();
+            row.setOnMouseClicked(e -> {
+                if (e.getClickCount() == 2 && !row.isEmpty() && onViewCase != null) {
+                    onViewCase.accept(row.getItem());
+                }
+            });
+            return row;
+        });
+
         return table;
+    }
+
+    private Button createViewButton() {
+        FontIcon fi = new FontIcon(Feather.ARROW_RIGHT);
+        fi.setIconSize(14);
+        fi.setIconColor(Color.web(tm.accentBlue()));
+        Button btn = new Button();
+        btn.setGraphic(fi);
+        btn.setTooltip(new Tooltip("View details"));
+        btn.setStyle("""
+            -fx-background-color: transparent;
+            -fx-cursor: hand;
+            -fx-padding: 4 8;
+            -fx-background-radius: 4;
+        """);
+        btn.setOnMouseEntered(e -> btn.setStyle(String.format("""
+            -fx-background-color: %s18;
+            -fx-cursor: hand;
+            -fx-padding: 4 8;
+            -fx-background-radius: 4;
+        """, tm.accentBlue())));
+        btn.setOnMouseExited(e -> btn.setStyle("""
+            -fx-background-color: transparent;
+            -fx-cursor: hand;
+            -fx-padding: 4 8;
+            -fx-background-radius: 4;
+        """));
+        return btn;
     }
 
     public Parent getRoot() {
