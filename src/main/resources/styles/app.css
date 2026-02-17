@@ -1,0 +1,31 @@
+/* ==========================================
+   Court Records & Tracking — Supplemental CSS
+   (loaded on top of AtlantaFX Cupertino theme)
+   ========================================== */
+
+/* ---- Table cell padding ---- */
+.table-cell {
+    -fx-padding: 8 14;
+}
+
+.table-view .column-header .label {
+    -fx-padding: 8 14;
+    -fx-font-weight: 600;
+}
+
+/* ---- Remove table outer border for cleaner look ---- */
+.table-view {
+    -fx-border-color: transparent;
+}
+
+/* ---- Muted text helper ---- */
+.text-muted {
+    -fx-opacity: 0.6;
+}
+
+/* ---- Bordered card helper ---- */
+.bordered {
+    -fx-border-color: -color-border-default;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+}
