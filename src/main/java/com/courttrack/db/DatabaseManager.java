@@ -6,7 +6,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:court_records.db";
+    private static final String DB_URL = "jdbc:sqlite:court_records.db?journal_mode=WAL&busy_timeout=5000";
     private static DatabaseManager instance;
 
     private DatabaseManager() {}
@@ -25,6 +25,8 @@ public class DatabaseManager {
     public void initialize() {
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
             stmt.execute("PRAGMA foreign_keys = ON");
+            stmt.execute("PRAGMA journal_mode = WAL");
+            stmt.execute("PRAGMA busy_timeout = 5000");
 
             // --- Core tables ---
 
@@ -79,6 +81,13 @@ public class DatabaseManager {
                     status TEXT,
                     facility TEXT,
                     offense_type TEXT,
+                    is_new INTEGER DEFAULT 1,
+                    has_changes INTEGER DEFAULT 0,
+                    version INTEGER DEFAULT 1,
+                    last_synced_at TEXT,
+                    sync_retry_count INTEGER DEFAULT 0,
+                    next_retry_at TEXT,
+                    last_sync_error TEXT,
                     created_at TEXT DEFAULT (datetime('now')),
                     updated_at TEXT DEFAULT (datetime('now'))
                 )
@@ -107,6 +116,13 @@ public class DatabaseManager {
                     hearing_dates TEXT,
                     court_assistant TEXT,
                     is_deleted INTEGER DEFAULT 0,
+                    is_new INTEGER DEFAULT 1,
+                    has_changes INTEGER DEFAULT 0,
+                    version INTEGER DEFAULT 1,
+                    last_synced_at TEXT,
+                    sync_retry_count INTEGER DEFAULT 0,
+                    next_retry_at TEXT,
+                    last_sync_error TEXT,
                     created_at TEXT DEFAULT (datetime('now')),
                     updated_at TEXT DEFAULT (datetime('now'))
                 )
@@ -238,6 +254,47 @@ public class DatabaseManager {
                 )
             """);
 
+            // --- Sync queue table ---
+
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS sync_queue (
+                    queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entity_type TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'QUEUED',
+                    depends_on_entity_type TEXT,
+                    depends_on_entity_id TEXT,
+                    timestamp TEXT DEFAULT (datetime('now')),
+                    started_at TEXT,
+                    completed_at TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    last_error TEXT,
+                    next_retry_at TEXT,
+                    court_id TEXT,
+                    UNIQUE(entity_type, entity_id)
+                )
+            """);
+
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS sync_stats (
+                    sync_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sync_type TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    user_info TEXT,
+                    started_at TEXT DEFAULT (datetime('now')),
+                    completed_at TEXT,
+                    status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+                    offenders_synced INTEGER DEFAULT 0,
+                    cases_synced INTEGER DEFAULT 0,
+                    offenders_failed INTEGER DEFAULT 0,
+                    cases_failed INTEGER DEFAULT 0,
+                    data_size_bytes INTEGER DEFAULT 0,
+                    error_message TEXT,
+                    error_class TEXT
+                )
+            """);
+
             // --- Migrations for existing databases ---
             migrateSchema(stmt);
 
@@ -292,6 +349,24 @@ public class DatabaseManager {
         safeAddColumn(stmt, "person", "facility", "TEXT");
         safeAddColumn(stmt, "person", "offense_type", "TEXT");
 
+        // Sync columns for person table
+        safeAddColumn(stmt, "person", "is_new", "INTEGER DEFAULT 1");
+        safeAddColumn(stmt, "person", "has_changes", "INTEGER DEFAULT 0");
+        safeAddColumn(stmt, "person", "version", "INTEGER DEFAULT 1");
+        safeAddColumn(stmt, "person", "last_synced_at", "TEXT");
+        safeAddColumn(stmt, "person", "sync_retry_count", "INTEGER DEFAULT 0");
+        safeAddColumn(stmt, "person", "next_retry_at", "TEXT");
+        safeAddColumn(stmt, "person", "last_sync_error", "TEXT");
+
+        // Sync columns for court_case table
+        safeAddColumn(stmt, "court_case", "is_new", "INTEGER DEFAULT 1");
+        safeAddColumn(stmt, "court_case", "has_changes", "INTEGER DEFAULT 0");
+        safeAddColumn(stmt, "court_case", "version", "INTEGER DEFAULT 1");
+        safeAddColumn(stmt, "court_case", "last_synced_at", "TEXT");
+        safeAddColumn(stmt, "court_case", "sync_retry_count", "INTEGER DEFAULT 0");
+        safeAddColumn(stmt, "court_case", "next_retry_at", "TEXT");
+        safeAddColumn(stmt, "court_case", "last_sync_error", "TEXT");
+
         // charge new columns
         safeAddColumn(stmt, "charge", "created_at", "TEXT DEFAULT (datetime('now'))");
         safeAddColumn(stmt, "charge", "updated_at", "TEXT DEFAULT (datetime('now'))");
@@ -306,7 +381,7 @@ public class DatabaseManager {
     }
 
     private void seedDataIfEmpty(Connection conn) throws SQLException {
-        var rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM person");
+        var rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM court");
         rs.next();
         if (rs.getInt(1) > 0) return;
 
@@ -328,78 +403,6 @@ public class DatabaseManager {
                 INSERT INTO app_user (user_id, email, full_name, username, password_hash, salt, court_id, role, status)
                 VALUES ('admin-001', 'admin@courttrack.ke', 'System Administrator', 'admin',
                         'placeholder_hash', 'placeholder_salt', 'court-nairobi-mc', 'COURT_ADMIN', 'ACTIVE')
-            """);
-
-            // Seed persons
-            stmt.execute("""
-                INSERT INTO person (person_id, national_id, first_name, last_name, gender, dob, phone_number, email,
-                                    nationality, occupation, risk_level, status)
-                VALUES
-                ('p1', '12345678', 'John', 'Kamau', 'Male', '1990-03-15', '0712345678', 'jkamau@email.com',
-                 'Kenyan', 'Trader', 'LOW', 'Active'),
-                ('p2', '23456789', 'Jane', 'Wanjiku', 'Female', '1985-07-22', '0723456789', 'jwanjiku@email.com',
-                 'Kenyan', 'Driver', 'LOW', 'Active'),
-                ('p3', '34567890', 'Peter', 'Odhiambo', 'Male', '1992-11-08', '0734567890', 'podhiambo@email.com',
-                 'Kenyan', 'Farmer', 'MEDIUM', 'Active'),
-                ('p4', '45678901', 'Mary', 'Akinyi', 'Female', '1988-01-30', '0745678901', 'makinyi@email.com',
-                 'Kenyan', 'Teacher', 'LOW', 'Active'),
-                ('p5', '56789012', 'Samuel', 'Kipchoge', 'Male', '1995-06-12', '0756789012', 'skipchoge@email.com',
-                 'Kenyan', 'Security Guard', 'MEDIUM', 'Active'),
-                ('p6', '67890123', 'Grace', 'Muthoni', 'Female', '1991-09-25', '0767890123', 'gmuthoni@email.com',
-                 'Kenyan', 'Nurse', 'LOW', 'Active'),
-                ('p7', '78901234', 'David', 'Wanyama', 'Male', '1987-04-18', '0778901234', 'dwanyama@email.com',
-                 'Kenyan', 'Mechanic', 'LOW', 'Released'),
-                ('p8', '89012345', 'Faith', 'Njeri', 'Female', '1993-12-05', '0789012345', 'fnjeri@email.com',
-                 'Kenyan', 'Business Owner', 'LOW', 'Active')
-            """);
-
-            // Seed cases with enriched fields
-            stmt.execute("""
-                INSERT INTO court_case (case_id, case_number, case_title, court_id, court_name, filing_date,
-                                        case_status, case_category, priority, location_of_offence)
-                VALUES
-                ('c1', 'CR-001/2024', 'Republic v. John Kamau', 'court-nairobi-mc', 'Nairobi Magistrates Court',
-                 '2024-01-15', 'OPEN', 'Criminal', 'MEDIUM', 'Nairobi CBD'),
-                ('c2', 'TR-002/2024', 'Republic v. Jane Wanjiku', 'court-nairobi-mc', 'Nairobi Magistrates Court',
-                 '2024-02-20', 'OPEN', 'Traffic', 'LOW', 'Thika Road'),
-                ('c3', 'CV-003/2024', 'Odhiambo v. Akinyi', 'court-nairobi-hc', 'Nairobi High Court',
-                 '2024-03-10', 'CLOSED', 'Civil', 'HIGH', NULL),
-                ('c4', 'CR-004/2024', 'Republic v. Samuel Kipchoge', 'court-mombasa-mc', 'Mombasa Law Courts',
-                 '2024-04-05', 'OPEN', 'Criminal', 'HIGH', 'Likoni'),
-                ('c5', 'TR-005/2024', 'Republic v. David Wanyama', 'court-kisumu-mc', 'Kisumu Law Courts',
-                 '2024-05-18', 'CLOSED', 'Traffic', 'LOW', 'Kisumu-Busia Highway'),
-                ('c6', 'CV-006/2024', 'Njeri v. Muthoni & Others', 'court-nairobi-hc', 'Nairobi High Court',
-                 '2024-06-22', 'OPEN', 'Civil', 'MEDIUM', NULL),
-                ('c7', 'CR-007/2024', 'Republic v. Peter Odhiambo', 'court-nakuru-mc', 'Nakuru Law Courts',
-                 '2024-07-30', 'OPEN', 'Criminal', 'MEDIUM', 'Nakuru Town'),
-                ('c8', 'TR-008/2024', 'Republic v. Unknown Driver', 'court-eldoret-mc', 'Eldoret Law Courts',
-                 '2024-08-14', 'OPEN', 'Traffic', 'LOW', 'Eldoret-Iten Road')
-            """);
-
-            // Seed case participants
-            stmt.execute("""
-                INSERT INTO case_participant (participant_id, case_id, person_id, role_type, is_active)
-                VALUES
-                ('cp1', 'c1', 'p1', 'Accused', 1),
-                ('cp2', 'c1', 'p6', 'Complainant', 1),
-                ('cp3', 'c2', 'p2', 'Accused', 1),
-                ('cp4', 'c3', 'p3', 'Accused', 1),
-                ('cp5', 'c3', 'p4', 'Complainant', 1),
-                ('cp6', 'c4', 'p5', 'Accused', 1),
-                ('cp7', 'c5', 'p7', 'Accused', 1),
-                ('cp8', 'c6', 'p8', 'Complainant', 1)
-            """);
-
-            // Seed charges with verdicts
-            stmt.execute("""
-                INSERT INTO charge (charge_id, case_id, accused_person_id, offense_code, particulars, plea, verdict, sentence_notes)
-                VALUES
-                ('ch1', 'c1', 'p1', 'Penal Code Sec 268', 'Common nuisance contrary to section 268', 'NOT_GUILTY', NULL, NULL),
-                ('ch2', 'c2', 'p2', 'Traffic Act Sec 12', 'Exceeding speed limit in a built-up area', 'GUILTY', 'CONVICTED', 'Fine of Ksh 10,000'),
-                ('ch3', 'c3', 'p3', 'Civil Suit', 'Breach of contract for sale of land LR No. 1234', NULL, 'JUDGEMENT_FOR_PLAINTIFF', 'Damages of Ksh 500,000 awarded'),
-                ('ch4', 'c4', 'p5', 'Penal Code Sec 308', 'Assault causing bodily harm', 'NOT_GUILTY', NULL, NULL),
-                ('ch5', 'c5', 'p7', 'Traffic Act Sec 44', 'Driving without a valid license', 'GUILTY', 'CONVICTED', 'Fine of Ksh 5,000 or 1 month imprisonment'),
-                ('ch6', 'c7', 'p3', 'Penal Code Sec 275', 'Theft of property valued over Ksh 10,000', 'NOT_GUILTY', NULL, NULL)
             """);
         }
     }

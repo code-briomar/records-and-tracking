@@ -20,6 +20,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+import com.courttrack.sync.SyncCoordinator;
+import javafx.stage.Modality;
+
 public class CaseListView {
     private final VBox root;
     private final CaseDao caseDao = new CaseDao();
@@ -220,11 +223,13 @@ public class CaseListView {
         actionsCol.setCellFactory(col -> new TableCell<>() {
             private final Button viewBtn = iconBtn(Feather.EYE, "View case", tm.accentBlue());
             private final Button editBtn = iconBtn(Feather.EDIT_2, "Edit case", tm.accentGreen());
-            private final HBox box = new HBox(2, viewBtn, editBtn);
+            private final Button deleteBtn = iconBtn(Feather.TRASH_2, "Delete case", tm.accentRed());
+            private final HBox box = new HBox(2, viewBtn, editBtn, deleteBtn);
             {
                 box.setAlignment(Pos.CENTER);
                 viewBtn.setOnAction(e -> handleView(getTableView().getItems().get(getIndex())));
                 editBtn.setOnAction(e -> handleEdit(getTableView().getItems().get(getIndex())));
+                deleteBtn.setOnAction(e -> handleDelete(getTableView().getItems().get(getIndex())));
             }
             @Override protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
@@ -298,6 +303,51 @@ public class CaseListView {
             caseDao.upsertFirstCharge(updated.getCaseId(), updated.getChargeParticulars(), updated.getChargePlea(), updated.getChargeVerdict());
             refreshTable();
         });
+    }
+
+    private void handleDelete(CourtCase c) {
+        Dialog<Boolean> confirm = new Dialog<>();
+        confirm.setTitle("Confirm Deletion");
+        confirm.setHeaderText(null);
+        confirm.initModality(Modality.APPLICATION_MODAL);
+
+        VBox content = new VBox(12);
+        content.setPadding(new Insets(16, 24, 8, 24));
+        content.setPrefWidth(400);
+
+        FontIcon warnIcon = new FontIcon(Feather.ALERT_TRIANGLE);
+        warnIcon.setIconSize(28);
+        warnIcon.setIconColor(Color.web(tm.accentRed()));
+
+        Label titleLabel = new Label("Delete case " + c.getCaseNumber() + "?");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
+
+        HBox titleRow = new HBox(12, warnIcon, titleLabel);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
+
+        Label detailLabel = new Label("This case will be soft-deleted from the system. " +
+            "The record can be restored later if needed.\n\n" +
+            "Title: " + (c.getCaseTitle() != null ? c.getCaseTitle() : "\u2014"));
+        detailLabel.setWrapText(true);
+        detailLabel.getStyleClass().add("text-muted");
+
+        content.getChildren().addAll(titleRow, detailLabel);
+
+        confirm.getDialogPane().setContent(content);
+
+        ButtonType deleteType = new ButtonType("Delete", ButtonBar.ButtonData.OK_DONE);
+        confirm.getDialogPane().getButtonTypes().addAll(deleteType, ButtonType.CANCEL);
+
+        Button deleteBtn = (Button) confirm.getDialogPane().lookupButton(deleteType);
+        deleteBtn.setStyle("-fx-background-color: " + tm.accentRed() + "; -fx-text-fill: white;");
+
+        confirm.setResultConverter(bt -> bt == deleteType);
+        Optional<Boolean> result = confirm.showAndWait();
+        if (result.isPresent() && result.get()) {
+            caseDao.softDelete(c.getCaseId());
+            SyncCoordinator.getInstance().queueCaseSync(c.getCaseId(), "DELETE", null);
+            refreshTable();
+        }
     }
 
     public Parent getRoot() { return root; }

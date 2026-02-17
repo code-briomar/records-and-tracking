@@ -2,9 +2,12 @@ package com.courttrack.ui;
 
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
+import com.courttrack.sync.SyncStatus;
+import javafx.animation.Animation;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
 import javafx.animation.KeyValue;
+import javafx.animation.RotateTransition;
 import javafx.animation.Timeline;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -223,10 +226,108 @@ public class MainView {
             userAvatar.setOnMouseClicked(e -> onLogout.run());
         }
 
-        bottomBox.getChildren().addAll(settingsBtn, userCard);
+        // Sync status indicator
+        HBox syncRow = buildSyncIndicator();
+        bottomBox.getChildren().addAll(syncRow, settingsBtn, userCard);
 
         sb.getChildren().addAll(toggleRow, logoRow, navSection, spacer, bottomBox);
         return sb;
+    }
+
+    private HBox buildSyncIndicator() {
+        SyncStatus sync = SyncStatus.getInstance();
+
+        FontIcon icon = new FontIcon(Feather.CLOUD_OFF);
+        icon.setIconSize(16);
+
+        Label label = new Label();
+        label.setFont(Font.font("System", 12));
+
+        // Manual sync button with spin animation
+        FontIcon syncBtnIcon = new FontIcon(Feather.REFRESH_CW);
+        syncBtnIcon.setIconSize(14);
+        syncBtnIcon.setIconColor(Color.web(tm.sidebarMuted()));
+
+        RotateTransition spin = new RotateTransition(Duration.millis(800), syncBtnIcon);
+        spin.setByAngle(360);
+        spin.setCycleCount(Animation.INDEFINITE);
+        spin.setInterpolator(Interpolator.LINEAR);
+
+        Button syncBtn = new Button();
+        syncBtn.setGraphic(syncBtnIcon);
+        syncBtn.setStyle("""
+            -fx-background-color: transparent;
+            -fx-cursor: hand;
+            -fx-padding: 4;
+            -fx-background-radius: 4;
+        """);
+        syncBtn.setTooltip(new Tooltip("Sync Now"));
+        syncBtn.setOnAction(e -> {
+            new Thread(() -> com.courttrack.sync.SyncCoordinator.getInstance().syncAll()).start();
+        });
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        HBox row = new HBox(8, icon);
+        row.setAlignment(sidebarCollapsed ? Pos.CENTER : Pos.CENTER_LEFT);
+        row.setPadding(new Insets(8, 14, 8, 14));
+        row.setStyle(String.format("-fx-background-color: %s; -fx-background-radius: 6;", tm.sidebarActive()));
+        if (!sidebarCollapsed) {
+            row.getChildren().addAll(label, spacer, syncBtn);
+        }
+
+        Runnable updateIndicator = () -> {
+            SyncStatus.State state = sync.getState();
+            syncBtn.setDisable(state == SyncStatus.State.SYNCING);
+            if (state == SyncStatus.State.SYNCING) {
+                spin.play();
+                syncBtnIcon.setIconColor(Color.web(tm.accentBlue()));
+            } else {
+                spin.stop();
+                syncBtnIcon.setRotate(0);
+                syncBtnIcon.setIconColor(Color.web(tm.sidebarMuted()));
+            }
+            switch (state) {
+                case SYNCED -> {
+                    icon.setIconCode(Feather.CLOUD);
+                    icon.setIconColor(Color.web(tm.accentGreen()));
+                    label.setText(sync.messageProperty().get());
+                    label.setTextFill(Color.web(tm.accentGreen()));
+                }
+                case SYNCING -> {
+                    icon.setIconCode(Feather.REFRESH_CW);
+                    icon.setIconColor(Color.web(tm.accentBlue()));
+                    label.setText(sync.messageProperty().get());
+                    label.setTextFill(Color.web(tm.accentBlue()));
+                }
+                case ERROR -> {
+                    icon.setIconCode(Feather.CLOUD_OFF);
+                    icon.setIconColor(Color.web(tm.accentRed()));
+                    label.setText(sync.messageProperty().get());
+                    label.setTextFill(Color.web(tm.accentRed()));
+                }
+                case OFFLINE -> {
+                    icon.setIconCode(Feather.CLOUD_OFF);
+                    icon.setIconColor(Color.web(tm.sidebarMuted()));
+                    label.setText("Offline");
+                    label.setTextFill(Color.web(tm.sidebarMuted()));
+                }
+            }
+        };
+
+        // Initial state
+        updateIndicator.run();
+
+        // Listen for changes
+        sync.stateProperty().addListener((obs, oldVal, newVal) -> updateIndicator.run());
+        sync.messageProperty().addListener((obs, oldVal, newVal) -> updateIndicator.run());
+
+        Tooltip tip = new Tooltip();
+        tip.textProperty().bind(sync.messageProperty());
+        Tooltip.install(row, tip);
+
+        return row;
     }
 
     private void toggleSidebar() {

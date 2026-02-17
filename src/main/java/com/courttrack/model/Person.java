@@ -46,6 +46,15 @@ public class Person {
     private String offenseType;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    
+    // Sync fields
+    private boolean isNew = true;
+    private boolean hasChanges = false;
+    private int version = 1;
+    private LocalDateTime lastSyncedAt;
+    private int syncRetryCount = 0;
+    private LocalDateTime nextRetryAt;
+    private String lastSyncError;
 
     public Person() {
         this.personId = UUID.randomUUID().toString();
@@ -175,6 +184,27 @@ public class Person {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public boolean isNew() { return isNew; }
+    public void setNew(boolean aNew) { isNew = aNew; }
+
+    public boolean hasChanges() { return hasChanges; }
+    public void setHasChanges(boolean hasChanges) { this.hasChanges = hasChanges; }
+
+    public int getVersion() { return version; }
+    public void setVersion(int version) { this.version = version; }
+
+    public LocalDateTime getLastSyncedAt() { return lastSyncedAt; }
+    public void setLastSyncedAt(LocalDateTime lastSyncedAt) { this.lastSyncedAt = lastSyncedAt; }
+
+    public int getSyncRetryCount() { return syncRetryCount; }
+    public void setSyncRetryCount(int syncRetryCount) { this.syncRetryCount = syncRetryCount; }
+
+    public LocalDateTime getNextRetryAt() { return nextRetryAt; }
+    public void setNextRetryAt(LocalDateTime nextRetryAt) { this.nextRetryAt = nextRetryAt; }
+
+    public String getLastSyncError() { return lastSyncError; }
+    public void setLastSyncError(String lastSyncError) { this.lastSyncError = lastSyncError; }
 
     public String getFullName() {
         StringBuilder sb = new StringBuilder();

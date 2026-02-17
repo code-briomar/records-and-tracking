@@ -227,6 +227,7 @@ public class OffenderListView {
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
             personDao.softDelete(p.getPersonId());
+            com.courttrack.sync.SyncCoordinator.getInstance().queuePersonSync(p.getPersonId(), "DELETE");
             refreshTable();
         }
     }

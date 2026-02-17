@@ -26,3 +26,5 @@ replay_pid*
 *.db
 
 target/
+src/main/resources/firebase/firebase-service-account.json
+.claude/settings.local.json

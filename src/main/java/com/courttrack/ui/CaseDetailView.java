@@ -15,6 +15,8 @@ import javafx.scene.text.FontWeight;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
+import com.courttrack.sync.SyncCoordinator;
+import javafx.stage.Modality;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -85,7 +87,23 @@ public class CaseDetailView {
         final CourtCase caseRef = c;
         editBtn.setOnAction(e -> handleEdit(caseRef));
 
-        topBar.getChildren().addAll(backBtn, topSpacer, editBtn);
+        FontIcon delIcon = new FontIcon(Feather.TRASH_2);
+        delIcon.setIconSize(14);
+        delIcon.setIconColor(Color.web(tm.accentRed()));
+        Button deleteBtn = new Button("Delete");
+        deleteBtn.setGraphic(delIcon);
+        deleteBtn.setStyle(String.format("""
+            -fx-background-color: transparent;
+            -fx-text-fill: %s;
+            -fx-border-color: %s;
+            -fx-border-radius: 6;
+            -fx-background-radius: 6;
+            -fx-padding: 6 12;
+            -fx-cursor: hand;
+        """, tm.accentRed(), tm.accentRed()));
+        deleteBtn.setOnAction(e -> handleDelete(caseRef));
+
+        topBar.getChildren().addAll(backBtn, topSpacer, deleteBtn, editBtn);
         content.getChildren().add(topBar);
 
         // --- Header ---
@@ -355,6 +373,48 @@ public class CaseDetailView {
             root.getChildren().clear();
             buildUI();
         });
+    }
+
+    private void handleDelete(CourtCase c) {
+        Dialog<Boolean> confirm = new Dialog<>();
+        confirm.setTitle("Confirm Deletion");
+        confirm.setHeaderText(null);
+        confirm.initModality(Modality.APPLICATION_MODAL);
+
+        VBox box = new VBox(12);
+        box.setPadding(new Insets(16, 24, 8, 24));
+        box.setPrefWidth(400);
+
+        FontIcon warnIcon = new FontIcon(Feather.ALERT_TRIANGLE);
+        warnIcon.setIconSize(28);
+        warnIcon.setIconColor(Color.web(tm.accentRed()));
+
+        Label titleLabel = new Label("Delete case " + c.getCaseNumber() + "?");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
+
+        HBox titleRow = new HBox(12, warnIcon, titleLabel);
+        titleRow.setAlignment(Pos.CENTER_LEFT);
+
+        Label detailLabel = new Label("This case will be soft-deleted. The record can be restored later if needed.");
+        detailLabel.setWrapText(true);
+        detailLabel.getStyleClass().add("text-muted");
+
+        box.getChildren().addAll(titleRow, detailLabel);
+        confirm.getDialogPane().setContent(box);
+
+        ButtonType deleteType = new ButtonType("Delete", ButtonBar.ButtonData.OK_DONE);
+        confirm.getDialogPane().getButtonTypes().addAll(deleteType, ButtonType.CANCEL);
+
+        Button delBtn = (Button) confirm.getDialogPane().lookupButton(deleteType);
+        delBtn.setStyle("-fx-background-color: " + tm.accentRed() + "; -fx-text-fill: white;");
+
+        confirm.setResultConverter(bt -> bt == deleteType);
+        Optional<Boolean> result = confirm.showAndWait();
+        if (result.isPresent() && result.get()) {
+            caseDao.softDelete(c.getCaseId());
+            SyncCoordinator.getInstance().queueCaseSync(c.getCaseId(), "DELETE", null);
+            onBack.run();
+        }
     }
 
     public Parent getRoot() { return root; }
