@@ -3,6 +3,7 @@ package com.courttrack.ui;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.sync.SyncStatus;
+import com.courttrack.update.UpdateInfo;
 import javafx.animation.Animation;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -47,6 +48,10 @@ public class MainView {
     private Button logoutBtn;
     private Label settingsLabel;
 
+    // Update notification
+    private VBox centerWrapper;
+    private UpdateNotificationBar updateBar;
+
     public MainView(String username, Runnable onLogout) {
         this.username = username;
         this.onLogout = onLogout;
@@ -60,7 +65,24 @@ public class MainView {
         sidebar = buildSidebar();
         root.setLeft(sidebar);
         contentArea.setPadding(new Insets(0));
-        root.setCenter(contentArea);
+
+        centerWrapper = new VBox();
+        VBox.setVgrow(contentArea, Priority.ALWAYS);
+        centerWrapper.getChildren().add(contentArea);
+        root.setCenter(centerWrapper);
+    }
+
+    /**
+     * Called from App.java when an update is detected.
+     * Shows a notification bar above the content area.
+     */
+    public void showUpdateNotification(UpdateInfo updateInfo) {
+        if (updateBar != null) return; // already showing
+        updateBar = new UpdateNotificationBar(updateInfo, () -> {
+            centerWrapper.getChildren().remove(updateBar);
+            updateBar = null;
+        });
+        centerWrapper.getChildren().addFirst(updateBar);
     }
 
     private VBox buildSidebar() {
@@ -263,7 +285,7 @@ public class MainView {
         """);
         syncBtn.setTooltip(new Tooltip("Sync Now"));
         syncBtn.setOnAction(e -> {
-            new Thread(() -> com.courttrack.sync.SyncCoordinator.getInstance().syncAll()).start();
+            new Thread(() -> com.courttrack.sync.SyncCoordinator.getInstance().syncAll(true)).start();
         });
 
         Region spacer = new Region();

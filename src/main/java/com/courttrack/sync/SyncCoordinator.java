@@ -80,6 +80,10 @@ public class SyncCoordinator {
     }
 
     public synchronized void syncAll() {
+        syncAll(false);
+    }
+
+    public synchronized void syncAll(boolean force) {
         if (!CourtContext.getInstance().isOperationAllowed("SyncCoordinator.syncAll")) {
             LOGGER.severe("SYNC BLOCKED: No court bound");
             return;
@@ -96,8 +100,8 @@ public class SyncCoordinator {
             return;
         }
 
-        // Dead sync prevention: skip if nothing to sync
-        if (!hasPendingWork()) {
+        // Dead sync prevention: skip if nothing to sync (unless forced)
+        if (!force && !hasPendingWork()) {
             LOGGER.info("Nothing to sync — skipping");
             SyncStatus.getInstance().set(SyncStatus.State.SYNCED, "Synced");
             return;
