@@ -28,3 +28,9 @@ replay_pid*
 target/
 src/main/resources/firebase/firebase-service-account.json
 .claude/settings.local.json
+
+records-and-tracking-linux.zip
+rpmbuild/
+target/
+
+*.spec

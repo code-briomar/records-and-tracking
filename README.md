@@ -4,6 +4,58 @@
 
 This project is designed to support Kenyan court clerks by digitizing and streamlining their daily tasks.
 
+## Auto-Update System
+
+The app includes automatic update detection and installation. When a new version is released on GitHub, users will be notified and can update with one click.
+
+### How It Works
+1. On startup, the app checks GitHub for new releases
+2. If a newer version is found, an update notification appears
+3. User clicks "Download & Install" to download the update
+4. After download, user clicks "Restart Now" to install and launch the new version
+
+### Creating Releases
+
+To release a new version:
+
+1. **Build the release:**
+   ```bash
+   mvn clean package -DskipTests
+   mkdir -p target/libs
+   cp target/records-and-tracking-0.1.0-SNAPSHOT.jar target/libs/
+   export TMPDIR=~/jpackage-tmp
+   export JAVA_TOOL_OPTIONS="-Djava.io.tmpdir=$TMPDIR"
+   jpackage \
+     --input target/libs \
+     --name records-and-tracking \
+     --main-jar records-and-tracking-0.1.0-SNAPSHOT.jar \
+     --main-class com.courttrack.AppLauncher \
+     --type app-image \
+     --app-version X.Y.Z \
+     --description "Records and Tracking" \
+     --dest target/jpackage \
+     --temp $TMPDIR
+   ```
+
+2. **Create ZIPs for each platform:**
+   ```bash
+   cd target/jpackage
+   zip -r ../records-and-tracking-linux.zip records-and-tracking/
+   # For Windows: zip -r ../records-and-tracking-windows.zip records-and-tracking/
+   ```
+
+3. **Upload to GitHub:**
+   ```bash
+   gh release create vX.Y.Z --title "Version X.Y.Z" --notes "Release X.Y.Z"
+   gh release upload vX.Y.Z target/records-and-tracking-linux.zip
+   gh release upload vX.Y.Z target/records-and-tracking-windows.zip
+   ```
+
+### Requirements
+- ZIP filenames must contain the platform: `records-and-tracking-linux.zip` or `records-and-tracking-windows.zip`
+- Release tag must be higher than the current version in `app.properties`
+- Use `jpackage` to create self-contained app images (includes Java runtime)
+
 ## Features
 
 ### Streamlining Case Management & Reducing Workload

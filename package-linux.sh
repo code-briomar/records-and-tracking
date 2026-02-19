@@ -24,6 +24,7 @@ mvn clean package -DskipTests
 
 # ── 2. Stage input JARs (thin project JAR + all deps) ───────────────────────
 echo ">>> Staging input JARs..."
+mkdir -p target/libs
 cp "$SNAPSHOT_JAR" target/libs/
 
 # ── 3. Collect Linux-specific JavaFX JARs (contain the native .so files) ────
