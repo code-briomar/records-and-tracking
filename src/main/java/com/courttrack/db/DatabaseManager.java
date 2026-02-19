@@ -1,13 +1,27 @@
 package com.courttrack.db;
 
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 
 public class DatabaseManager {
-    private static final String DB_URL = "jdbc:sqlite:court_records.db?journal_mode=WAL&busy_timeout=5000";
+    private static final String DB_DIR = System.getProperty("user.home") + "/.courttrack";
+    private static final String DB_NAME = "court_records";
+    private static final String DB_URL = "jdbc:h2:file:" + DB_DIR + "/" + DB_NAME + ";MODE=MySQL;AUTO_SERVER=TRUE";
     private static DatabaseManager instance;
+
+    static {
+        try {
+            Files.createDirectories(Path.of(DB_DIR));
+            Class.forName("org.h2.Driver");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize H2 database", e);
+        }
+    }
 
     private DatabaseManager() {}
 
@@ -24,117 +38,113 @@ public class DatabaseManager {
 
     public void initialize() {
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
-            stmt.execute("PRAGMA foreign_keys = ON");
-            stmt.execute("PRAGMA journal_mode = WAL");
-            stmt.execute("PRAGMA busy_timeout = 5000");
-
             // --- Core tables ---
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS court (
-                    court_id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    location TEXT,
-                    email TEXT,
-                    is_active INTEGER DEFAULT 1,
-                    created_at TEXT DEFAULT (datetime('now')),
-                    created_by TEXT
+                    court_id VARCHAR(255) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    location VARCHAR(255),
+                    email VARCHAR(255),
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_by VARCHAR(255)
                 )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS person (
-                    person_id TEXT PRIMARY KEY,
-                    national_id TEXT UNIQUE,
-                    first_name TEXT NOT NULL,
-                    last_name TEXT NOT NULL,
-                    other_names TEXT,
-                    gender TEXT,
-                    dob TEXT,
-                    phone_number TEXT,
-                    email TEXT,
-                    photo_local_uri TEXT,
-                    is_deleted INTEGER DEFAULT 0,
-                    alias TEXT,
-                    nationality TEXT,
-                    marital_status TEXT,
-                    occupation TEXT,
-                    address TEXT,
-                    first_offender INTEGER DEFAULT 0,
+                    person_id VARCHAR(255) PRIMARY KEY,
+                    national_id VARCHAR(255) UNIQUE,
+                    first_name VARCHAR(255) NOT NULL,
+                    last_name VARCHAR(255) NOT NULL,
+                    other_names VARCHAR(255),
+                    gender VARCHAR(50),
+                    dob DATE,
+                    phone_number VARCHAR(50),
+                    email VARCHAR(255),
+                    photo_local_uri VARCHAR(500),
+                    is_deleted BOOLEAN DEFAULT FALSE,
+                    alias VARCHAR(255),
+                    nationality VARCHAR(100),
+                    marital_status VARCHAR(50),
+                    occupation VARCHAR(200),
+                    address VARCHAR(500),
+                    first_offender BOOLEAN DEFAULT TRUE,
                     criminal_history TEXT,
                     known_associates TEXT,
-                    arrest_date TEXT,
-                    arresting_officer TEXT,
-                    place_of_arrest TEXT,
+                    arrest_date DATE,
+                    arresting_officer VARCHAR(255),
+                    place_of_arrest VARCHAR(255),
                     penalty TEXT,
                     notes TEXT,
-                    eye_color TEXT,
-                    hair_color TEXT,
-                    emergency_contact_name TEXT,
-                    emergency_contact_phone TEXT,
-                    emergency_contact_relationship TEXT,
-                    legal_representation TEXT,
+                    eye_color VARCHAR(50),
+                    hair_color VARCHAR(50),
+                    emergency_contact_name VARCHAR(255),
+                    emergency_contact_phone VARCHAR(50),
+                    emergency_contact_relationship VARCHAR(100),
+                    legal_representation VARCHAR(255),
                     medical_conditions TEXT,
-                    risk_level TEXT,
+                    risk_level VARCHAR(50),
                     distinguishing_marks TEXT,
-                    type TEXT,
-                    status TEXT,
-                    facility TEXT,
-                    offense_type TEXT,
-                    is_new INTEGER DEFAULT 1,
-                    has_changes INTEGER DEFAULT 0,
-                    version INTEGER DEFAULT 1,
-                    last_synced_at TEXT,
-                    sync_retry_count INTEGER DEFAULT 0,
-                    next_retry_at TEXT,
+                    type VARCHAR(50),
+                    status VARCHAR(50),
+                    facility VARCHAR(255),
+                    offense_type VARCHAR(100),
+                    is_new BOOLEAN DEFAULT TRUE,
+                    has_changes BOOLEAN DEFAULT FALSE,
+                    version INT DEFAULT 1,
+                    last_synced_at TIMESTAMP,
+                    sync_retry_count INT DEFAULT 0,
+                    next_retry_at TIMESTAMP,
                     last_sync_error TEXT,
-                    created_at TEXT DEFAULT (datetime('now')),
-                    updated_at TEXT DEFAULT (datetime('now'))
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS court_case (
-                    case_id TEXT PRIMARY KEY,
-                    case_number TEXT UNIQUE NOT NULL,
-                    case_title TEXT,
-                    court_id TEXT,
-                    court_name TEXT,
-                    filing_date TEXT NOT NULL,
-                    case_status TEXT NOT NULL DEFAULT 'OPEN',
-                    case_category TEXT NOT NULL,
-                    case_type TEXT,
-                    priority TEXT,
+                    case_id VARCHAR(255) PRIMARY KEY,
+                    case_number VARCHAR(100) UNIQUE NOT NULL,
+                    case_title VARCHAR(500),
+                    court_id VARCHAR(255),
+                    court_name VARCHAR(255),
+                    filing_date DATE NOT NULL,
+                    case_status VARCHAR(50) NOT NULL DEFAULT 'OPEN',
+                    case_category VARCHAR(100) NOT NULL,
+                    case_type VARCHAR(100),
+                    priority VARCHAR(50),
                     description TEXT,
-                    date_of_judgment TEXT,
+                    date_of_judgment DATE,
                     sentence TEXT,
                     mitigation_notes TEXT,
-                    prosecution_counsel TEXT,
-                    appeal_status TEXT,
-                    location_of_offence TEXT,
+                    prosecution_counsel VARCHAR(255),
+                    appeal_status VARCHAR(50),
+                    location_of_offence VARCHAR(255),
                     evidence_summary TEXT,
                     hearing_dates TEXT,
-                    court_assistant TEXT,
-                    is_deleted INTEGER DEFAULT 0,
-                    is_new INTEGER DEFAULT 1,
-                    has_changes INTEGER DEFAULT 0,
-                    version INTEGER DEFAULT 1,
-                    last_synced_at TEXT,
-                    sync_retry_count INTEGER DEFAULT 0,
-                    next_retry_at TEXT,
+                    court_assistant VARCHAR(255),
+                    is_deleted BOOLEAN DEFAULT FALSE,
+                    is_new BOOLEAN DEFAULT TRUE,
+                    has_changes BOOLEAN DEFAULT FALSE,
+                    version INT DEFAULT 1,
+                    last_synced_at TIMESTAMP,
+                    sync_retry_count INT DEFAULT 0,
+                    next_retry_at TIMESTAMP,
                     last_sync_error TEXT,
-                    created_at TEXT DEFAULT (datetime('now')),
-                    updated_at TEXT DEFAULT (datetime('now'))
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS case_participant (
-                    participant_id TEXT PRIMARY KEY,
-                    case_id TEXT NOT NULL,
-                    person_id TEXT NOT NULL,
-                    role_type TEXT NOT NULL,
-                    is_active INTEGER DEFAULT 1,
+                    participant_id VARCHAR(255) PRIMARY KEY,
+                    case_id VARCHAR(255) NOT NULL,
+                    person_id VARCHAR(255) NOT NULL,
+                    role_type VARCHAR(100) NOT NULL,
+                    is_active BOOLEAN DEFAULT TRUE,
                     FOREIGN KEY (case_id) REFERENCES court_case(case_id),
                     FOREIGN KEY (person_id) REFERENCES person(person_id)
                 )
@@ -142,16 +152,16 @@ public class DatabaseManager {
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS charge (
-                    charge_id TEXT PRIMARY KEY,
-                    case_id TEXT NOT NULL,
-                    accused_person_id TEXT,
-                    offense_code TEXT,
+                    charge_id VARCHAR(255) PRIMARY KEY,
+                    case_id VARCHAR(255) NOT NULL,
+                    accused_person_id VARCHAR(255),
+                    offense_code VARCHAR(100),
                     particulars TEXT,
-                    plea TEXT,
-                    verdict TEXT,
+                    plea VARCHAR(100),
+                    verdict VARCHAR(100),
                     sentence_notes TEXT,
-                    created_at TEXT DEFAULT (datetime('now')),
-                    updated_at TEXT DEFAULT (datetime('now')),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (case_id) REFERENCES court_case(case_id),
                     FOREIGN KEY (accused_person_id) REFERENCES person(person_id)
                 )
@@ -161,25 +171,25 @@ public class DatabaseManager {
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS app_user (
-                    user_id TEXT PRIMARY KEY,
-                    email TEXT NOT NULL,
-                    full_name TEXT,
-                    username TEXT,
-                    password_hash TEXT,
-                    salt TEXT,
-                    court_id TEXT,
-                    title TEXT,
-                    professional_title TEXT,
-                    role TEXT NOT NULL DEFAULT 'CLERK',
-                    status TEXT NOT NULL DEFAULT 'ACTIVE',
-                    failed_login_attempts INTEGER DEFAULT 0,
-                    password_expiry_date TEXT,
-                    account_lock_timestamp TEXT,
-                    require_password_change INTEGER DEFAULT 0,
-                    last_login_date TEXT,
-                    language TEXT DEFAULT 'en',
-                    created_at TEXT DEFAULT (datetime('now')),
-                    updated_at TEXT DEFAULT (datetime('now')),
+                    user_id VARCHAR(255) PRIMARY KEY,
+                    email VARCHAR(255) NOT NULL,
+                    full_name VARCHAR(255),
+                    username VARCHAR(100),
+                    password_hash VARCHAR(255),
+                    salt VARCHAR(100),
+                    court_id VARCHAR(255),
+                    title VARCHAR(100),
+                    professional_title VARCHAR(100),
+                    role VARCHAR(50) NOT NULL DEFAULT 'CLERK',
+                    status VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+                    failed_login_attempts INT DEFAULT 0,
+                    password_expiry_date DATE,
+                    account_lock_timestamp TIMESTAMP,
+                    require_password_change BOOLEAN DEFAULT FALSE,
+                    last_login_date TIMESTAMP,
+                    language VARCHAR(10) DEFAULT 'en',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (court_id) REFERENCES court(court_id)
                 )
             """);
@@ -191,33 +201,33 @@ public class DatabaseManager {
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS auth_token (
-                    token_id TEXT PRIMARY KEY,
+                    token_id VARCHAR(255) PRIMARY KEY,
                     token TEXT NOT NULL,
-                    user_id TEXT NOT NULL,
-                    issued_at TEXT DEFAULT (datetime('now')),
-                    expires_at TEXT,
-                    is_revoked INTEGER DEFAULT 0,
-                    revoked_at TEXT,
-                    last_used_at TEXT,
+                    user_id VARCHAR(255) NOT NULL,
+                    issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP,
+                    is_revoked BOOLEAN DEFAULT FALSE,
+                    revoked_at TIMESTAMP,
+                    last_used_at TIMESTAMP,
                     refresh_token TEXT,
-                    refresh_expires_at TEXT,
-                    device_info TEXT,
-                    ip_address TEXT,
+                    refresh_expires_at TIMESTAMP,
+                    device_info VARCHAR(500),
+                    ip_address VARCHAR(50),
                     FOREIGN KEY (user_id) REFERENCES app_user(user_id)
                 )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS login_attempt (
-                    attempt_id TEXT PRIMARY KEY,
-                    username TEXT,
-                    user_id TEXT,
-                    email TEXT,
-                    status TEXT NOT NULL,
-                    failure_reason TEXT,
-                    timestamp TEXT DEFAULT (datetime('now')),
-                    ip_address TEXT,
-                    device_info TEXT
+                    attempt_id VARCHAR(255) PRIMARY KEY,
+                    username VARCHAR(100),
+                    user_id VARCHAR(255),
+                    email VARCHAR(255),
+                    status VARCHAR(50) NOT NULL,
+                    failure_reason VARCHAR(255),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    ip_address VARCHAR(50),
+                    device_info VARCHAR(500)
                 )
             """);
 
@@ -225,32 +235,32 @@ public class DatabaseManager {
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS case_document (
-                    document_id TEXT PRIMARY KEY,
-                    case_id TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    mime_type TEXT,
-                    local_path TEXT,
-                    file_size INTEGER DEFAULT 0,
-                    upload_date TEXT DEFAULT (datetime('now')),
-                    uploaded_by TEXT,
+                    document_id VARCHAR(255) PRIMARY KEY,
+                    case_id VARCHAR(255) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    mime_type VARCHAR(100),
+                    local_path VARCHAR(500),
+                    file_size BIGINT DEFAULT 0,
+                    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    uploaded_by VARCHAR(255),
                     FOREIGN KEY (case_id) REFERENCES court_case(case_id)
                 )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS audit_log (
-                    log_id TEXT PRIMARY KEY,
-                    timestamp TEXT DEFAULT (datetime('now')),
-                    user_id TEXT,
-                    username TEXT,
-                    action TEXT NOT NULL,
-                    entity_type TEXT,
-                    entity_id TEXT,
-                    status TEXT,
+                    log_id VARCHAR(255) PRIMARY KEY,
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    user_id VARCHAR(255),
+                    username VARCHAR(100),
+                    action VARCHAR(100) NOT NULL,
+                    entity_type VARCHAR(100),
+                    entity_id VARCHAR(255),
+                    status VARCHAR(50),
                     details TEXT,
-                    court_id TEXT,
-                    ip_address TEXT,
-                    device_info TEXT
+                    court_id VARCHAR(255),
+                    ip_address VARCHAR(50),
+                    device_info VARCHAR(500)
                 )
             """);
 
@@ -258,38 +268,38 @@ public class DatabaseManager {
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS sync_queue (
-                    queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    entity_type TEXT NOT NULL,
-                    entity_id TEXT NOT NULL,
-                    operation TEXT NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'QUEUED',
-                    depends_on_entity_type TEXT,
-                    depends_on_entity_id TEXT,
-                    timestamp TEXT DEFAULT (datetime('now')),
-                    started_at TEXT,
-                    completed_at TEXT,
-                    retry_count INTEGER DEFAULT 0,
+                    queue_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    entity_type VARCHAR(100) NOT NULL,
+                    entity_id VARCHAR(255) NOT NULL,
+                    operation VARCHAR(50) NOT NULL,
+                    status VARCHAR(50) NOT NULL DEFAULT 'QUEUED',
+                    depends_on_entity_type VARCHAR(100),
+                    depends_on_entity_id VARCHAR(255),
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    started_at TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    retry_count INT DEFAULT 0,
                     last_error TEXT,
-                    next_retry_at TEXT,
-                    court_id TEXT,
+                    next_retry_at TIMESTAMP,
+                    court_id VARCHAR(255),
                     UNIQUE(entity_type, entity_id)
                 )
             """);
 
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS sync_stats (
-                    sync_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sync_type TEXT NOT NULL,
-                    direction TEXT NOT NULL,
+                    sync_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    sync_type VARCHAR(50) NOT NULL,
+                    direction VARCHAR(50) NOT NULL,
                     user_info TEXT,
-                    started_at TEXT DEFAULT (datetime('now')),
-                    completed_at TEXT,
-                    status TEXT NOT NULL DEFAULT 'IN_PROGRESS',
-                    offenders_synced INTEGER DEFAULT 0,
-                    cases_synced INTEGER DEFAULT 0,
-                    offenders_failed INTEGER DEFAULT 0,
-                    cases_failed INTEGER DEFAULT 0,
-                    data_size_bytes INTEGER DEFAULT 0,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    status VARCHAR(50) NOT NULL DEFAULT 'IN_PROGRESS',
+                    offenders_synced INT DEFAULT 0,
+                    cases_synced INT DEFAULT 0,
+                    offenders_failed INT DEFAULT 0,
+                    cases_failed INT DEFAULT 0,
+                    data_size_bytes BIGINT DEFAULT 0,
                     error_message TEXT,
                     error_class TEXT
                 )
@@ -306,70 +316,70 @@ public class DatabaseManager {
 
     private void migrateSchema(Statement stmt) {
         // court_case new columns
-        safeAddColumn(stmt, "court_case", "case_title", "TEXT");
-        safeAddColumn(stmt, "court_case", "court_name", "TEXT");
-        safeAddColumn(stmt, "court_case", "case_type", "TEXT");
-        safeAddColumn(stmt, "court_case", "priority", "TEXT");
+        safeAddColumn(stmt, "court_case", "case_title", "VARCHAR(500)");
+        safeAddColumn(stmt, "court_case", "court_name", "VARCHAR(255)");
+        safeAddColumn(stmt, "court_case", "case_type", "VARCHAR(100)");
+        safeAddColumn(stmt, "court_case", "priority", "VARCHAR(50)");
         safeAddColumn(stmt, "court_case", "description", "TEXT");
-        safeAddColumn(stmt, "court_case", "date_of_judgment", "TEXT");
+        safeAddColumn(stmt, "court_case", "date_of_judgment", "DATE");
         safeAddColumn(stmt, "court_case", "sentence", "TEXT");
         safeAddColumn(stmt, "court_case", "mitigation_notes", "TEXT");
-        safeAddColumn(stmt, "court_case", "prosecution_counsel", "TEXT");
-        safeAddColumn(stmt, "court_case", "appeal_status", "TEXT");
-        safeAddColumn(stmt, "court_case", "location_of_offence", "TEXT");
+        safeAddColumn(stmt, "court_case", "prosecution_counsel", "VARCHAR(255)");
+        safeAddColumn(stmt, "court_case", "appeal_status", "VARCHAR(50)");
+        safeAddColumn(stmt, "court_case", "location_of_offence", "VARCHAR(255)");
         safeAddColumn(stmt, "court_case", "evidence_summary", "TEXT");
         safeAddColumn(stmt, "court_case", "hearing_dates", "TEXT");
-        safeAddColumn(stmt, "court_case", "court_assistant", "TEXT");
+        safeAddColumn(stmt, "court_case", "court_assistant", "VARCHAR(255)");
 
         // person new columns
-        safeAddColumn(stmt, "person", "alias", "TEXT");
-        safeAddColumn(stmt, "person", "nationality", "TEXT");
-        safeAddColumn(stmt, "person", "marital_status", "TEXT");
-        safeAddColumn(stmt, "person", "occupation", "TEXT");
-        safeAddColumn(stmt, "person", "address", "TEXT");
-        safeAddColumn(stmt, "person", "first_offender", "INTEGER DEFAULT 0");
+        safeAddColumn(stmt, "person", "alias", "VARCHAR(255)");
+        safeAddColumn(stmt, "person", "nationality", "VARCHAR(100)");
+        safeAddColumn(stmt, "person", "marital_status", "VARCHAR(50)");
+        safeAddColumn(stmt, "person", "occupation", "VARCHAR(200)");
+        safeAddColumn(stmt, "person", "address", "VARCHAR(500)");
+        safeAddColumn(stmt, "person", "first_offender", "BOOLEAN DEFAULT TRUE");
         safeAddColumn(stmt, "person", "criminal_history", "TEXT");
         safeAddColumn(stmt, "person", "known_associates", "TEXT");
-        safeAddColumn(stmt, "person", "arrest_date", "TEXT");
-        safeAddColumn(stmt, "person", "arresting_officer", "TEXT");
-        safeAddColumn(stmt, "person", "place_of_arrest", "TEXT");
+        safeAddColumn(stmt, "person", "arrest_date", "DATE");
+        safeAddColumn(stmt, "person", "arresting_officer", "VARCHAR(255)");
+        safeAddColumn(stmt, "person", "place_of_arrest", "VARCHAR(255)");
         safeAddColumn(stmt, "person", "penalty", "TEXT");
         safeAddColumn(stmt, "person", "notes", "TEXT");
-        safeAddColumn(stmt, "person", "eye_color", "TEXT");
-        safeAddColumn(stmt, "person", "hair_color", "TEXT");
-        safeAddColumn(stmt, "person", "emergency_contact_name", "TEXT");
-        safeAddColumn(stmt, "person", "emergency_contact_phone", "TEXT");
-        safeAddColumn(stmt, "person", "emergency_contact_relationship", "TEXT");
-        safeAddColumn(stmt, "person", "legal_representation", "TEXT");
+        safeAddColumn(stmt, "person", "eye_color", "VARCHAR(50)");
+        safeAddColumn(stmt, "person", "hair_color", "VARCHAR(50)");
+        safeAddColumn(stmt, "person", "emergency_contact_name", "VARCHAR(255)");
+        safeAddColumn(stmt, "person", "emergency_contact_phone", "VARCHAR(50)");
+        safeAddColumn(stmt, "person", "emergency_contact_relationship", "VARCHAR(100)");
+        safeAddColumn(stmt, "person", "legal_representation", "VARCHAR(255)");
         safeAddColumn(stmt, "person", "medical_conditions", "TEXT");
-        safeAddColumn(stmt, "person", "risk_level", "TEXT");
+        safeAddColumn(stmt, "person", "risk_level", "VARCHAR(50)");
         safeAddColumn(stmt, "person", "distinguishing_marks", "TEXT");
-        safeAddColumn(stmt, "person", "type", "TEXT");
-        safeAddColumn(stmt, "person", "status", "TEXT");
-        safeAddColumn(stmt, "person", "facility", "TEXT");
-        safeAddColumn(stmt, "person", "offense_type", "TEXT");
+        safeAddColumn(stmt, "person", "type", "VARCHAR(50)");
+        safeAddColumn(stmt, "person", "status", "VARCHAR(50)");
+        safeAddColumn(stmt, "person", "facility", "VARCHAR(255)");
+        safeAddColumn(stmt, "person", "offense_type", "VARCHAR(100)");
 
         // Sync columns for person table
-        safeAddColumn(stmt, "person", "is_new", "INTEGER DEFAULT 1");
-        safeAddColumn(stmt, "person", "has_changes", "INTEGER DEFAULT 0");
-        safeAddColumn(stmt, "person", "version", "INTEGER DEFAULT 1");
-        safeAddColumn(stmt, "person", "last_synced_at", "TEXT");
-        safeAddColumn(stmt, "person", "sync_retry_count", "INTEGER DEFAULT 0");
-        safeAddColumn(stmt, "person", "next_retry_at", "TEXT");
+        safeAddColumn(stmt, "person", "is_new", "BOOLEAN DEFAULT TRUE");
+        safeAddColumn(stmt, "person", "has_changes", "BOOLEAN DEFAULT FALSE");
+        safeAddColumn(stmt, "person", "version", "INT DEFAULT 1");
+        safeAddColumn(stmt, "person", "last_synced_at", "TIMESTAMP");
+        safeAddColumn(stmt, "person", "sync_retry_count", "INT DEFAULT 0");
+        safeAddColumn(stmt, "person", "next_retry_at", "TIMESTAMP");
         safeAddColumn(stmt, "person", "last_sync_error", "TEXT");
 
         // Sync columns for court_case table
-        safeAddColumn(stmt, "court_case", "is_new", "INTEGER DEFAULT 1");
-        safeAddColumn(stmt, "court_case", "has_changes", "INTEGER DEFAULT 0");
-        safeAddColumn(stmt, "court_case", "version", "INTEGER DEFAULT 1");
-        safeAddColumn(stmt, "court_case", "last_synced_at", "TEXT");
-        safeAddColumn(stmt, "court_case", "sync_retry_count", "INTEGER DEFAULT 0");
-        safeAddColumn(stmt, "court_case", "next_retry_at", "TEXT");
+        safeAddColumn(stmt, "court_case", "is_new", "BOOLEAN DEFAULT TRUE");
+        safeAddColumn(stmt, "court_case", "has_changes", "BOOLEAN DEFAULT FALSE");
+        safeAddColumn(stmt, "court_case", "version", "INT DEFAULT 1");
+        safeAddColumn(stmt, "court_case", "last_synced_at", "TIMESTAMP");
+        safeAddColumn(stmt, "court_case", "sync_retry_count", "INT DEFAULT 0");
+        safeAddColumn(stmt, "court_case", "next_retry_at", "TIMESTAMP");
         safeAddColumn(stmt, "court_case", "last_sync_error", "TEXT");
 
         // charge new columns
-        safeAddColumn(stmt, "charge", "created_at", "TEXT DEFAULT (datetime('now'))");
-        safeAddColumn(stmt, "charge", "updated_at", "TEXT DEFAULT (datetime('now'))");
+        safeAddColumn(stmt, "charge", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        safeAddColumn(stmt, "charge", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
     }
 
     private void safeAddColumn(Statement stmt, String table, String column, String type) {

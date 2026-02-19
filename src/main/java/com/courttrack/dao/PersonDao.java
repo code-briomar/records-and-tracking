@@ -90,7 +90,7 @@ public class PersonDao {
         String sql = """
             UPDATE person SET national_id = ?, first_name = ?, last_name = ?, other_names = ?,
             gender = ?, dob = ?, phone_number = ?, email = ?, photo_local_uri = ?,
-            updated_at = datetime('now')
+            updated_at = CURRENT_TIMESTAMP
             WHERE person_id = ?
         """;
         try (Connection conn = db.getConnection();
@@ -112,7 +112,7 @@ public class PersonDao {
     }
 
     public void softDelete(String personId) {
-        String sql = "UPDATE person SET is_deleted = 1, updated_at = datetime('now') WHERE person_id = ?";
+        String sql = "UPDATE person SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?";
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, personId);

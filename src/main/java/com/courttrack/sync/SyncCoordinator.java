@@ -153,8 +153,8 @@ public class SyncCoordinator {
     private boolean hasPendingWork() {
         try (Connection conn = DatabaseManager.getInstance().getConnection()) {
             // Check unsynced local entities
-            int unsyncedPersons = countQuery(conn, "SELECT COUNT(*) FROM person WHERE is_new = 1 OR has_changes = 1 OR is_deleted = 1");
-            int unsyncedCases = countQuery(conn, "SELECT COUNT(*) FROM court_case WHERE is_new = 1 OR has_changes = 1 OR is_deleted = 1");
+            int unsyncedPersons = countQuery(conn, "SELECT COUNT(*) FROM person WHERE is_new = TRUE OR has_changes = TRUE OR is_deleted = TRUE");
+            int unsyncedCases = countQuery(conn, "SELECT COUNT(*) FROM court_case WHERE is_new = TRUE OR has_changes = TRUE OR is_deleted = TRUE");
             int pendingQueue = countQuery(conn, "SELECT COUNT(*) FROM sync_queue WHERE status IN ('QUEUED', 'BLOCKED', 'FAILED')");
 
             if (unsyncedPersons > 0 || unsyncedCases > 0 || pendingQueue > 0) {
@@ -691,7 +691,7 @@ public class SyncCoordinator {
     }
 
     private void updatePerson(Connection conn, Person person) throws SQLException {
-        String sql = "UPDATE person SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = datetime('now') WHERE person_id = ?";
+        String sql = "UPDATE person SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setBoolean(1, person.isNew());
             ps.setBoolean(2, person.hasChanges());
@@ -706,7 +706,7 @@ public class SyncCoordinator {
     }
 
     private void updateCase(Connection conn, CourtCase courtCase) throws SQLException {
-        String sql = "UPDATE court_case SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = datetime('now') WHERE case_id = ?";
+        String sql = "UPDATE court_case SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setBoolean(1, courtCase.isNew());
             ps.setBoolean(2, courtCase.hasChanges());
@@ -867,7 +867,7 @@ public class SyncCoordinator {
     }
 
     private void updatePersonFull(Connection conn, Person person) throws SQLException {
-        String sql = "UPDATE person SET national_id = ?, first_name = ?, last_name = ?, other_names = ?, gender = ?, phone_number = ?, email = ?, alias = ?, nationality = ?, marital_status = ?, occupation = ?, address = ?, first_offender = ?, criminal_history = ?, known_associates = ?, arresting_officer = ?, place_of_arrest = ?, penalty = ?, notes = ?, eye_color = ?, hair_color = ?, emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?, legal_representation = ?, medical_conditions = ?, risk_level = ?, distinguishing_marks = ?, type = ?, status = ?, facility = ?, offense_type = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = datetime('now') WHERE person_id = ?";
+        String sql = "UPDATE person SET national_id = ?, first_name = ?, last_name = ?, other_names = ?, gender = ?, phone_number = ?, email = ?, alias = ?, nationality = ?, marital_status = ?, occupation = ?, address = ?, first_offender = ?, criminal_history = ?, known_associates = ?, arresting_officer = ?, place_of_arrest = ?, penalty = ?, notes = ?, eye_color = ?, hair_color = ?, emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?, legal_representation = ?, medical_conditions = ?, risk_level = ?, distinguishing_marks = ?, type = ?, status = ?, facility = ?, offense_type = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, person.getNationalId());
             ps.setString(2, person.getFirstName());
@@ -949,7 +949,7 @@ public class SyncCoordinator {
     }
 
     private void updateCaseFull(Connection conn, CourtCase courtCase) throws SQLException {
-        String sql = "UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, court_name = ?, case_status = ?, case_category = ?, case_type = ?, priority = ?, description = ?, sentence = ?, mitigation_notes = ?, prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?, evidence_summary = ?, hearing_dates = ?, court_assistant = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = datetime('now') WHERE case_id = ?";
+        String sql = "UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, court_name = ?, case_status = ?, case_category = ?, case_type = ?, priority = ?, description = ?, sentence = ?, mitigation_notes = ?, prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?, evidence_summary = ?, hearing_dates = ?, court_assistant = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, courtCase.getCaseNumber());
             ps.setString(2, courtCase.getCaseTitle());
@@ -1021,7 +1021,7 @@ public class SyncCoordinator {
 
     private void completeSyncSuccess(long syncId) throws SQLException {
         try (Connection conn = DatabaseManager.getInstance().getConnection()) {
-            String sql = "UPDATE sync_stats SET status = 'SUCCESS', completed_at = datetime('now') WHERE sync_id = ?";
+            String sql = "UPDATE sync_stats SET status = 'SUCCESS', completed_at = CURRENT_TIMESTAMP WHERE sync_id = ?";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setLong(1, syncId);
                 ps.executeUpdate();
@@ -1031,7 +1031,7 @@ public class SyncCoordinator {
 
     private void completeSyncFailed(long syncId, String message, String errorClass) throws SQLException {
         try (Connection conn = DatabaseManager.getInstance().getConnection()) {
-            String sql = "UPDATE sync_stats SET status = 'FAILED', completed_at = datetime('now'), error_message = ?, error_class = ? WHERE sync_id = ?";
+            String sql = "UPDATE sync_stats SET status = 'FAILED', completed_at = CURRENT_TIMESTAMP, error_message = ?, error_class = ? WHERE sync_id = ?";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, message);
                 ps.setString(2, errorClass);
@@ -1068,7 +1068,7 @@ public class SyncCoordinator {
     }
 
     private void updateSyncQueueItem(Connection conn, SyncQueueItem item) throws SQLException {
-        String sql = "UPDATE sync_queue SET status = ?, operation = ?, timestamp = datetime('now'), started_at = ?, completed_at = ?, retry_count = ?, last_error = ?, next_retry_at = ? WHERE queue_id = ?";
+        String sql = "UPDATE sync_queue SET status = ?, operation = ?, timestamp = CURRENT_TIMESTAMP, started_at = ?, completed_at = ?, retry_count = ?, last_error = ?, next_retry_at = ? WHERE queue_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, item.getStatus());
             ps.setString(2, item.getOperation());
@@ -1093,7 +1093,7 @@ public class SyncCoordinator {
 
     private List<SyncQueueItem> getItemsReadyForRetry(Connection conn) throws SQLException {
         List<SyncQueueItem> items = new ArrayList<>();
-        String sql = "SELECT * FROM sync_queue WHERE status = 'FAILED' AND next_retry_at IS NOT NULL AND next_retry_at <= datetime('now')";
+        String sql = "SELECT * FROM sync_queue WHERE status = 'FAILED' AND next_retry_at IS NOT NULL AND next_retry_at <= CURRENT_TIMESTAMP";
         try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) items.add(mapResultSetToSyncQueueItem(rs));
         }
@@ -1136,7 +1136,7 @@ public class SyncCoordinator {
 
     private List<Person> getUnsyncedPersons(Connection conn) throws SQLException {
         List<Person> persons = new ArrayList<>();
-        String sql = "SELECT * FROM person WHERE is_new = 1 OR has_changes = 1 OR is_deleted = 1";
+        String sql = "SELECT * FROM person WHERE is_new = TRUE OR has_changes = TRUE OR is_deleted = TRUE";
         try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) persons.add(mapResultSetToPerson(rs));
         }
@@ -1145,7 +1145,7 @@ public class SyncCoordinator {
 
     private List<CourtCase> getUnsyncedCases(Connection conn) throws SQLException {
         List<CourtCase> cases = new ArrayList<>();
-        String sql = "SELECT * FROM court_case WHERE is_new = 1 OR has_changes = 1 OR is_deleted = 1";
+        String sql = "SELECT * FROM court_case WHERE is_new = TRUE OR has_changes = TRUE OR is_deleted = TRUE";
         try (PreparedStatement ps = conn.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             while (rs.next()) cases.add(mapResultSetToCourtCase(rs));
         }

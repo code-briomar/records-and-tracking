@@ -157,7 +157,7 @@ public class CaseDao {
             description = ?, date_of_judgment = ?, sentence = ?, mitigation_notes = ?,
             prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?,
             evidence_summary = ?, hearing_dates = ?, court_assistant = ?,
-            updated_at = datetime('now')
+            updated_at = CURRENT_TIMESTAMP
             WHERE case_id = ?
         """;
         try (Connection conn = db.getConnection();
@@ -189,7 +189,7 @@ public class CaseDao {
     }
 
     public void softDelete(String caseId) {
-        String sql = "UPDATE court_case SET is_deleted = 1, updated_at = datetime('now') WHERE case_id = ?";
+        String sql = "UPDATE court_case SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, caseId);

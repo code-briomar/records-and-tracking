@@ -8,6 +8,8 @@ import com.courttrack.sync.SyncStatus;
 import com.courttrack.ui.LoginView;
 import com.courttrack.ui.MainView;
 import com.courttrack.ui.ThemeManager;
+import com.courttrack.update.UpdateChecker;
+import com.courttrack.update.UpdateInfo;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -29,7 +31,9 @@ import java.util.concurrent.TimeUnit;
 public class App extends Application {
     private Stage primaryStage;
     private LoginView loginView;
+    private MainView mainView;
     private ScheduledExecutorService connectivityChecker;
+    private ScheduledExecutorService updateChecker;
 
     @Override
     public void start(Stage stage) {
@@ -133,10 +137,13 @@ public class App extends Application {
                 Platform.runLater(() -> {
                     loginView.setLoading(false);
                     primaryStage.setTitle("Records & Tracking System - " + courtName);
-                    MainView mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
+                    mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
                     Scene scene = new Scene(mainView.getRoot(), 1200, 800);
                     addSupplementalCss(scene);
                     primaryStage.setScene(scene);
+
+                    // Schedule update check after 5 seconds
+                    scheduleUpdateCheck();
                 });
 
                 // Start sync in background
@@ -211,20 +218,14 @@ public class App extends Application {
 
     private void upsertLocalUser(String userId, String email, String fullName, String courtId, String role) {
         try (Connection conn = DatabaseManager.getInstance().getConnection()) {
-            String sql = "INSERT INTO app_user (user_id, email, full_name, court_id, role, status) " +
-                        "VALUES (?, ?, ?, ?, ?, 'ACTIVE') " +
-                        "ON CONFLICT(user_id) DO UPDATE SET email = ?, full_name = ?, court_id = ?, role = ?, " +
-                        "last_login_date = datetime('now'), updated_at = datetime('now')";
+            String sql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, last_login_date, updated_at) " +
+                        "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
             try (PreparedStatement ps = conn.prepareStatement(sql)) {
                 ps.setString(1, userId);
                 ps.setString(2, email);
                 ps.setString(3, fullName);
                 ps.setString(4, courtId);
                 ps.setString(5, role);
-                ps.setString(6, email);
-                ps.setString(7, fullName);
-                ps.setString(8, courtId);
-                ps.setString(9, role);
                 ps.executeUpdate();
             }
         } catch (Exception e) {
@@ -236,6 +237,37 @@ public class App extends Application {
         ThemeManager tm = ThemeManager.getInstance();
         String css = getClass().getResource(tm.getSupplementalCssPath()).toExternalForm();
         scene.getStylesheets().add(css);
+    }
+
+    private void scheduleUpdateCheck() {
+        if (updateChecker != null) updateChecker.shutdownNow();
+        updateChecker = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "update-checker");
+            t.setDaemon(true);
+            return t;
+        });
+        updateChecker.schedule(() -> {
+            try {
+                UpdateChecker checker = new UpdateChecker();
+                checker.checkForUpdate().ifPresent(updateInfo -> {
+                    Platform.runLater(() -> {
+                        if (mainView != null) {
+                            mainView.showUpdateNotification(updateInfo);
+                        }
+                    });
+                });
+            } catch (Exception e) {
+                System.err.println("Update check failed: " + e.getMessage());
+            }
+        }, 5, TimeUnit.SECONDS);
+    }
+
+    @Override
+    public void stop() {
+        stopConnectivityChecker();
+        if (updateChecker != null) {
+            updateChecker.shutdownNow();
+        }
     }
 
     public static void main(String[] args) {

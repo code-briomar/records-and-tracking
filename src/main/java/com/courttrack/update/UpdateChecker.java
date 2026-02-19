@@ -62,31 +62,44 @@ public class UpdateChecker {
                 return Optional.empty();
             }
 
-            // Find the right asset for this OS
-            String osName = System.getProperty("os.name", "").toLowerCase();
-            String extension;
-            if (osName.contains("linux")) {
-                extension = ".deb";
-            } else if (osName.contains("win")) {
-                extension = ".msi";
-            } else {
-                System.out.println("Unsupported OS for auto-update: " + osName);
-                return Optional.empty();
-            }
+            // Find the right asset for this OS - use .zip for all platforms
+            String extension = ".zip";
 
             JsonArray assets = release.getAsJsonArray("assets");
+            String downloadUrl = null;
+            long fileSize = -1;
+
+            // Try .zip first (most portable)
             for (JsonElement el : assets) {
                 JsonObject asset = el.getAsJsonObject();
                 String name = asset.get("name").getAsString();
                 if (name.endsWith(extension)) {
-                    String downloadUrl = asset.get("browser_download_url").getAsString();
-                    long fileSize = asset.has("size") ? asset.get("size").getAsLong() : -1;
-                    return Optional.of(new UpdateInfo(tagName, downloadUrl, releaseNotes, fileSize));
+                    downloadUrl = asset.get("browser_download_url").getAsString();
+                    fileSize = asset.has("size") ? asset.get("size").getAsLong() : -1;
+                    break;
                 }
             }
 
-            System.out.println("No matching installer asset found for " + extension);
-            return Optional.empty();
+            // Fallback: if no platform-specific asset, look for any .zip
+            if (downloadUrl == null) {
+                for (JsonElement el : assets) {
+                    JsonObject asset = el.getAsJsonObject();
+                    String name = asset.get("name").getAsString();
+                    if (name.endsWith(".zip")) {
+                        downloadUrl = asset.get("browser_download_url").getAsString();
+                        fileSize = asset.has("size") ? asset.get("size").getAsLong() : -1;
+                        System.out.println("Using fallback ZIP asset: " + name);
+                        break;
+                    }
+                }
+            }
+
+            if (downloadUrl == null) {
+                System.out.println("No matching installer asset found for " + extension);
+                return Optional.empty();
+            }
+
+            return Optional.of(new UpdateInfo(tagName, downloadUrl, releaseNotes, fileSize));
 
         } catch (Exception e) {
             System.err.println("Update check failed: " + e.getMessage());
