@@ -1,5 +1,18 @@
 # Release Notes
 
+## v0.1.2 - YYYY-MM-DD
+
+### Added
+- (Your new features here)
+
+### Changed
+- (Your changes here)
+
+### Fixed
+- (Bug fixes here)
+
+---
+
 ## v0.1.1 - 2026-02-19
 
 ### Added

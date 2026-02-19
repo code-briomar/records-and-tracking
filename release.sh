@@ -34,6 +34,9 @@ mkdir -p rpmbuild/{BUILD,RPMS/x86_64,SPECS,SOURCES}
 
 cp "SPECS/${ARTIFACT_ID}.spec" rpmbuild/SPECS/
 
+# Update version in spec file
+sed -i "s/VERSION_PLACEHOLDER/${VERSION}/" rpmbuild/SPECS/${ARTIFACT_ID}.spec
+
 # Create source tarball
 cd rpmbuild/BUILD
 rm -rf "${ARTIFACT_ID}-${VERSION}" records-and-tracking-tmp
