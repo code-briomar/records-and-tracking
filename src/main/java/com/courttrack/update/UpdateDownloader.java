@@ -7,6 +7,7 @@ import javafx.beans.property.SimpleDoubleProperty;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -89,12 +90,16 @@ public class UpdateDownloader {
         }
 
         String osName = System.getProperty("os.name", "").toLowerCase();
-        ProcessBuilder pb = osName.contains("win")
+        boolean isWindows = osName.contains("win");
+        ProcessBuilder pb = isWindows
                 ? findWindowsLauncher(installDir)
                 : findUnixLauncher(installDir);
 
-        pb.inheritIO();
         pb.directory(installDir.toFile());
+        // On Windows the child is launched via START in a .bat, so it already has
+        // its own console/window — don't inherit the dying parent's I/O handles.
+        // On Unix, inherit so shell scripts get a proper terminal.
+        if (!isWindows) pb.inheritIO();
         pb.start();
 
         Platform.exit();
@@ -121,15 +126,27 @@ public class UpdateDownloader {
                 return new ProcessBuilder(exeFiles.get(0).toAbsolutePath().toString());
             }
         }
-        // Fallback: fat JAR — user already has Java installed to be running this
+        // Fallback: fat JAR — user already has Java installed to run this app.
+        // Use javaw.exe (GUI/windowless mode) — java.exe is a console subsystem binary
+        // which prevents JavaFX from initialising its graphics pipeline on Windows.
+        // Also write a .bat that uses START so the child is fully detached from the
+        // dying parent process and doesn't inherit broken I/O handles.
         try (var stream = Files.walk(installDir)) {
             var jarFiles = stream
                     .filter(p -> p.toString().toLowerCase().endsWith(".jar"))
                     .toList();
             if (!jarFiles.isEmpty()) {
-                String java = ProcessHandle.current().info().command()
-                        .orElse("java");
-                return new ProcessBuilder(java, "-jar", jarFiles.get(0).toAbsolutePath().toString());
+                String javaExe = ProcessHandle.current().info().command().orElse("");
+                String javawExe = javaExe.isEmpty()
+                        ? "javaw"
+                        : javaExe.replaceAll("(?i)\\bjava\\.exe$", "javaw.exe");
+
+                Path bat = installDir.resolve("_launch.bat");
+                Files.writeString(bat,
+                        "@echo off\r\nstart \"Records and Tracking\" \""
+                        + javawExe + "\" -jar \""
+                        + jarFiles.get(0).toAbsolutePath() + "\"\r\n");
+                return new ProcessBuilder("cmd", "/c", bat.toAbsolutePath().toString());
             }
         }
         throw new IOException("No launcher (.bat, .cmd, .exe, or .jar) found in extracted ZIP");
