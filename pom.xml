@@ -66,6 +66,24 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
@@ -111,6 +129,49 @@
                 <configuration>
                     <mainClass>com.courttrack.App</mainClass>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.7.3</version>
+                <configuration>
+                    <name>Records and Tracking</name>
+                    <appVersion>0.1.0</appVersion>
+                    <vendor>CourtTrack</vendor>
+                    <mainJar>${project.build.directory}/records-and-tracking-0.1.0-SNAPSHOT.jar</mainJar>
+                    <input>${project.build.directory}/lib</input>
+                    <icon>src/main/resources/icons/app.ico</icon>
+                    <destination>${project.build.directory}/jpackage</destination>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.akathist.maven.plugins.launch4j</groupId>
+                <artifactId>launch4j-maven-plugin</artifactId>
+                <version>2.7.0</version>
+                <configuration>
+                    <headerType>gui</headerType>
+                    <outfile>${project.build.directory}/records-and-tracking.exe</outfile>
+                    <jar>${project.build.directory}/records-and-tracking-0.1.0-SNAPSHOT.jar</jar>
+                    <icon>src/main/resources/icons/app.ico</icon>
+                    <classPath>
+                        <mainClass>com.courttrack.AppLauncher</mainClass>
+                    </classPath>
+                    <jvmArgs>
+                        <jvmArg>-Xmx512m</jvmArg>
+                    </jvmArgs>
+                    <version>0.1.0</version>
+                    <productName>Records and Tracking</productName>
+                    <companyName>CourtTrack</companyName>
+                    <fileDescription>Kenyan Court Records and Tracking System</fileDescription>
+                </configuration>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>launch4j</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

@@ -42,10 +42,10 @@ public class LoginView {
         Label icon = new Label("\u2696");
         icon.setFont(Font.font("System", FontWeight.NORMAL, 44));
 
-        Label title = new Label("Court Records & Tracking");
+        Label title = new Label("Records & Tracking");
         title.setFont(Font.font("System", FontWeight.BOLD, 18));
 
-        Label subtitle = new Label("Judiciary of Kenya");
+        Label subtitle = new Label("Kilungu Law Courts");
         subtitle.setFont(Font.font("System", FontWeight.NORMAL, 13));
         subtitle.getStyleClass().add("text-muted");
 

@@ -7,9 +7,12 @@ import com.courttrack.sync.SyncCoordinator;
 import com.courttrack.sync.SyncStatus;
 import com.courttrack.ui.LoginView;
 import com.courttrack.ui.MainView;
+import com.courttrack.ui.ReleaseNotesDialog;
 import com.courttrack.ui.ThemeManager;
 import com.courttrack.update.UpdateChecker;
 import com.courttrack.update.UpdateInfo;
+import com.courttrack.util.AppVersion;
+import com.courttrack.util.VersionPreferences;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -142,7 +145,10 @@ public class App extends Application {
                     addSupplementalCss(scene);
                     primaryStage.setScene(scene);
 
-                    // Schedule update check after 5 seconds
+                    // Check for version update and show release notes
+                    checkAndShowReleaseNotes();
+
+                    // Schedule update check
                     scheduleUpdateCheck();
                 });
 
@@ -237,6 +243,37 @@ public class App extends Application {
         ThemeManager tm = ThemeManager.getInstance();
         String css = getClass().getResource(tm.getSupplementalCssPath()).toExternalForm();
         scene.getStylesheets().add(css);
+    }
+
+    private void checkAndShowReleaseNotes() {
+        VersionPreferences prefs = VersionPreferences.getInstance();
+        String currentVersion = AppVersion.getVersion();
+        String lastVersion = prefs.getLastVersion();
+
+        if (!currentVersion.equals(lastVersion)) {
+            System.out.println("Version changed from " + lastVersion + " to " + currentVersion);
+            
+            // Check for release notes from latest GitHub release
+            new Thread(() -> {
+                try {
+                    UpdateChecker checker = new UpdateChecker();
+                    checker.checkForUpdate().ifPresent(updateInfo -> {
+                        Platform.runLater(() -> {
+                            ReleaseNotesDialog dialog = new ReleaseNotesDialog(
+                                updateInfo.getVersion(),
+                                updateInfo.getReleaseNotes()
+                            );
+                            dialog.showAndWait();
+                        });
+                    });
+                } catch (Exception e) {
+                    System.err.println("Failed to fetch release notes: " + e.getMessage());
+                }
+            }).start();
+
+            // Update the saved version
+            prefs.setLastVersion(currentVersion);
+        }
     }
 
     private void scheduleUpdateCheck() {
