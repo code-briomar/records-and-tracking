@@ -121,7 +121,18 @@ public class UpdateDownloader {
                 return new ProcessBuilder(exeFiles.get(0).toAbsolutePath().toString());
             }
         }
-        throw new IOException("No launcher (.bat, .cmd, or .exe) found in extracted ZIP");
+        // Fallback: fat JAR — user already has Java installed to be running this
+        try (var stream = Files.walk(installDir)) {
+            var jarFiles = stream
+                    .filter(p -> p.toString().toLowerCase().endsWith(".jar"))
+                    .toList();
+            if (!jarFiles.isEmpty()) {
+                String java = ProcessHandle.current().info().command()
+                        .orElse("java");
+                return new ProcessBuilder(java, "-jar", jarFiles.get(0).toAbsolutePath().toString());
+            }
+        }
+        throw new IOException("No launcher (.bat, .cmd, .exe, or .jar) found in extracted ZIP");
     }
 
     private ProcessBuilder findUnixLauncher(Path installDir) throws IOException {
