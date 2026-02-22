@@ -165,10 +165,10 @@ public class SyncCoordinator {
             // Check remote changes since last sync
             long lastSyncTime = getLastSuccessfulSyncTime();
             if (lastSyncTime > 0 && FirestoreContext.isAvailable()) {
-                var casesSnapshot = FirestoreContext.getCasesModifiedSince(lastSyncTime).get();
-                var offendersSnapshot = FirestoreContext.getOffendersModifiedSince(lastSyncTime).get();
-                int remoteCases = casesSnapshot.size();
-                int remoteOffenders = offendersSnapshot.size();
+                var cases = FirestoreContext.getCasesModifiedSince(lastSyncTime);
+                var offenders = FirestoreContext.getOffendersModifiedSince(lastSyncTime);
+                int remoteCases = cases.size();
+                int remoteOffenders = offenders.size();
                 if (remoteCases > 0 || remoteOffenders > 0) {
                     LOGGER.info("Remote changes found: cases=" + remoteCases + ", offenders=" + remoteOffenders);
                     return true;
@@ -261,10 +261,9 @@ public class SyncCoordinator {
                     LOGGER.info("Pushing person to Firestore: " + person.getPersonId() + " - " + person.getFullName());
                     
                     Map<String, Object> data = buildPersonMap(person);
-                    
+
                     // Push to Firestore
-                    com.google.cloud.firestore.DocumentReference docRef = FirestoreContext.offenderDoc(person.getPersonId());
-                    docRef.set(data).get();
+                    FirestoreContext.pushOffender(person.getPersonId(), data);
                     
                     // Update local sync flags
                     person.setNew(false);
@@ -311,8 +310,7 @@ public class SyncCoordinator {
                     
                     // Push to Firestore using caseId as document ID (caseNumber may contain invalid chars like /)
                     String docId = caseItem.getCaseId();
-                    com.google.cloud.firestore.DocumentReference docRef = FirestoreContext.caseDoc(docId);
-                    docRef.set(data).get();
+                    FirestoreContext.pushCase(docId, data);
                     
                     // Update local sync flags
                     caseItem.setNew(false);
@@ -406,15 +404,13 @@ public class SyncCoordinator {
         }
 
         try {
-            com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> queryFuture = FirestoreContext.getAllOffenders();
-            com.google.cloud.firestore.QuerySnapshot querySnapshot = queryFuture.get();
-            List<com.google.cloud.firestore.QueryDocumentSnapshot> documents = querySnapshot.getDocuments();
-            
+            List<Map.Entry<String, Map<String, Object>>> documents = FirestoreContext.getAllOffenders();
+
             LOGGER.info("=== Found " + documents.size() + " persons in Firestore ===");
-            
-            for (com.google.cloud.firestore.QueryDocumentSnapshot doc : documents) {
-                String personId = doc.getId();
-                Map<String, Object> data = doc.getData();
+
+            for (Map.Entry<String, Map<String, Object>> doc : documents) {
+                String personId = doc.getKey();
+                Map<String, Object> data = doc.getValue();
                 
                 System.out.println("--- Person: " + personId + " ---");
                 String name = getStr(data, "fullName");
@@ -446,15 +442,13 @@ public class SyncCoordinator {
         }
 
         try {
-            com.google.api.core.ApiFuture<com.google.cloud.firestore.QuerySnapshot> queryFuture = FirestoreContext.getAllCases();
-            com.google.cloud.firestore.QuerySnapshot querySnapshot = queryFuture.get();
-            List<com.google.cloud.firestore.QueryDocumentSnapshot> documents = querySnapshot.getDocuments();
-            
+            List<Map.Entry<String, Map<String, Object>>> documents = FirestoreContext.getAllCases();
+
             LOGGER.info("=== Found " + documents.size() + " cases in Firestore ===");
-            
-            for (com.google.cloud.firestore.QueryDocumentSnapshot doc : documents) {
-                String caseId = doc.getId();
-                Map<String, Object> data = doc.getData();
+
+            for (Map.Entry<String, Map<String, Object>> doc : documents) {
+                String caseId = doc.getKey();
+                Map<String, Object> data = doc.getValue();
                 
                 System.out.println("--- Case: " + caseId + " ---");
                 System.out.println("  Case Number: " + getStr(data, "caseNumber", "CaseNumber"));
@@ -600,10 +594,6 @@ public class SyncCoordinator {
             } catch (NumberFormatException e) {
                 return null;
             }
-        }
-        // Handle Firestore Timestamp objects
-        if (updatedAt instanceof com.google.cloud.Timestamp) {
-            return ((com.google.cloud.Timestamp) updatedAt).toDate().getTime();
         }
         return null;
     }

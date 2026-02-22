@@ -45,15 +45,6 @@ public class App extends Application {
         // Initialize database
         DatabaseManager.getInstance().initialize();
 
-        // Initialize Firestore (will fail gracefully if no service account)
-        try {
-            FirestoreContext.initialize();
-            System.out.println("Firestore initialized successfully");
-        } catch (Exception e) {
-            System.err.println("Firestore initialization failed: " + e.getMessage());
-            e.printStackTrace();
-        }
-
         // Apply AtlantaFX theme before showing any UI
         ThemeManager.getInstance().applyTheme();
 
@@ -79,19 +70,10 @@ public class App extends Application {
     private void onLoginAttempt(String courtId, String email, String password) {
         System.out.println("=== Login attempt: courtId=" + courtId + ", email=" + email);
 
-        if (!FirestoreContext.isInitialized()) {
-            Platform.runLater(() -> loginView.showError("Firestore not available. Cannot authenticate."));
-            return;
-        }
-
         new Thread(() -> {
             try {
-                // Query Firestore for user by email in the given court
-                var queryFuture = FirestoreContext.usersCollection(courtId)
-                    .whereEqualTo("email", email)
-                    .get();
-                var querySnapshot = queryFuture.get();
-                List<com.google.cloud.firestore.QueryDocumentSnapshot> docs = querySnapshot.getDocuments();
+                // Query Firestore for user by email in the given court (lazily authenticates)
+                var docs = FirestoreContext.getUsersByEmail(courtId, email);
 
                 if (docs.isEmpty()) {
                     Platform.runLater(() -> loginView.showError("Invalid email or Court ID"));
@@ -99,7 +81,7 @@ public class App extends Application {
                 }
 
                 var userDoc = docs.get(0);
-                Map<String, Object> userData = userDoc.getData();
+                Map<String, Object> userData = userDoc.getValue();
 
                 String storedHash = (String) userData.get("passwordHash");
                 String storedSalt = (String) userData.get("salt");
@@ -115,7 +97,7 @@ public class App extends Application {
                 }
 
                 // Auth successful — extract user info
-                String userId = userDoc.getId();
+                String userId = userDoc.getKey();
                 String fullName = (String) userData.getOrDefault("fullName", "");
                 String role = (String) userData.getOrDefault("role", "CLERK");
                 String status = (String) userData.getOrDefault("status", "ACTIVE");
@@ -133,7 +115,7 @@ public class App extends Application {
                 System.out.println("CourtContext bound: " + courtId + " - " + courtName);
 
                 // Upsert user into local database for offline reference
-                upsertLocalUser(userId, email, fullName, courtId, role);
+                upsertLocalUser(userId, email, fullName, courtId, courtName, role);
                 SyncStatus.getInstance().set(SyncStatus.State.SYNCING, "Connected");
 
                 // Switch to main view on UI thread
@@ -222,11 +204,19 @@ public class App extends Application {
         }
     }
 
-    private void upsertLocalUser(String userId, String email, String fullName, String courtId, String role) {
+    private void upsertLocalUser(String userId, String email, String fullName, String courtId, String courtName, String role) {
         try (Connection conn = DatabaseManager.getInstance().getConnection()) {
-            String sql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, last_login_date, updated_at) " +
+            // Ensure court exists locally first (satisfies the FK constraint on app_user)
+            String courtSql = "MERGE INTO court (court_id, name, is_active) KEY(court_id) VALUES (?, ?, TRUE)";
+            try (PreparedStatement ps = conn.prepareStatement(courtSql)) {
+                ps.setString(1, courtId);
+                ps.setString(2, courtName);
+                ps.executeUpdate();
+            }
+
+            String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, last_login_date, updated_at) " +
                         "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            try (PreparedStatement ps = conn.prepareStatement(userSql)) {
                 ps.setString(1, userId);
                 ps.setString(2, email);
                 ps.setString(3, fullName);

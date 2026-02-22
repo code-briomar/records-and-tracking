@@ -1,72 +1,29 @@
 package com.courttrack.sync;
 
-import com.google.api.core.ApiFuture;
-import com.google.auth.oauth2.GoogleCredentials;
-import com.google.cloud.firestore.CollectionReference;
-import com.google.cloud.firestore.DocumentReference;
-import com.google.cloud.firestore.Firestore;
-import com.google.cloud.firestore.Query;
-import com.google.cloud.firestore.QuerySnapshot;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
-import com.google.firebase.cloud.FirestoreClient;
-import java.io.InputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class FirestoreContext {
     private static final Logger LOGGER = Logger.getLogger(FirestoreContext.class.getName());
+    private static final String PROJECT_COURTS = "courts";
+
     private static final AtomicReference<String> currentCourtId = new AtomicReference<>();
-    private static volatile boolean initialized = false;
-    private static volatile Firestore firestore;
 
     private FirestoreContext() {}
 
-    public static void initialize() {
-        if (!initialized) {
-            synchronized (FirestoreContext.class) {
-                if (!initialized) {
-                    try {
-                        InputStream serviceAccount = FirestoreContext.class.getClassLoader()
-                            .getResourceAsStream("firebase/firebase-service-account.json");
-                        
-                        if (serviceAccount == null) {
-                            throw new RuntimeException("Firebase service account not found in resources/firebase/firebase-service-account.json");
-                        }
-
-                        FirebaseOptions options = FirebaseOptions.builder()
-                            .setCredentials(GoogleCredentials.fromStream(serviceAccount))
-                            .build();
-
-                        FirebaseApp.initializeApp(options);
-                        firestore = FirestoreClient.getFirestore();
-                        initialized = true;
-                        LOGGER.info("Firestore initialized successfully");
-                    } catch (Exception e) {
-                        LOGGER.log(Level.SEVERE, "Failed to initialize Firestore", e);
-                        throw new RuntimeException("Failed to initialize Firestore", e);
-                    }
-                }
-            }
-        }
-    }
-
-    public static Firestore getFirestore() {
-        if (!initialized) {
-            initialize();
-        }
-        if (firestore == null) {
-            throw new IllegalStateException("Firestore not initialized");
-        }
-        return firestore;
-    }
-
     public static boolean isInitialized() {
-        return initialized;
+        return FirebaseRestClient.getInstance().isAuthenticated();
+    }
+
+    public static boolean isAvailable() {
+        boolean available = isInitialized() && currentCourtId.get() != null;
+        LOGGER.info("FirestoreContext.isAvailable() = " + available
+                + " (authenticated=" + isInitialized() + ", courtId=" + currentCourtId.get() + ")");
+        return available;
     }
 
     public static void setCurrentCourtId(String courtId) {
@@ -78,12 +35,6 @@ public class FirestoreContext {
         return (id != null && !id.isEmpty()) ? Optional.of(id) : Optional.empty();
     }
 
-    public static boolean isAvailable() {
-        boolean available = initialized && currentCourtId.get() != null;
-        LOGGER.info("FirestoreContext.isAvailable() = " + available + " (initialized=" + initialized + ", courtId=" + currentCourtId.get() + ")");
-        return available;
-    }
-
     public static String getCurrentCourtIdOrThrow() {
         String id = currentCourtId.get();
         if (id == null || id.isEmpty()) {
@@ -92,49 +43,49 @@ public class FirestoreContext {
         return id;
     }
 
-    public static CollectionReference offendersCollection() {
-        return getFirestore().collection("courts")
-            .document(getCurrentCourtIdOrThrow())
-            .collection("offenders");
+    // --- Offenders ---
+
+    public static List<Map.Entry<String, Map<String, Object>>> getAllOffenders() throws IOException {
+        String courtId = getCurrentCourtIdOrThrow();
+        return FirebaseRestClient.getInstance().listDocuments(PROJECT_COURTS + "/" + courtId + "/offenders");
     }
 
-    public static CollectionReference casesCollection() {
-        return getFirestore().collection("courts")
-            .document(getCurrentCourtIdOrThrow())
-            .collection("cases");
+    public static List<Map.Entry<String, Map<String, Object>>> getOffendersModifiedSince(long timestamp) throws IOException {
+        String courtId = getCurrentCourtIdOrThrow();
+        return FirebaseRestClient.getInstance().queryGreaterThan(
+                PROJECT_COURTS + "/" + courtId, "offenders", "updatedAt", timestamp);
     }
 
-    public static DocumentReference offenderDoc(String offenderId) {
-        return offendersCollection().document(offenderId);
+    public static void pushOffender(String docId, Map<String, Object> data) throws IOException {
+        String courtId = getCurrentCourtIdOrThrow();
+        FirebaseRestClient.getInstance().upsertDocument(
+                PROJECT_COURTS + "/" + courtId + "/offenders/" + docId, data);
     }
 
-    public static DocumentReference caseDoc(String caseId) {
-        return casesCollection().document(caseId);
+    // --- Cases ---
+
+    public static List<Map.Entry<String, Map<String, Object>>> getAllCases() throws IOException {
+        String courtId = getCurrentCourtIdOrThrow();
+        return FirebaseRestClient.getInstance().listDocuments(PROJECT_COURTS + "/" + courtId + "/cases");
     }
 
-    public static ApiFuture<QuerySnapshot> getAllOffenders() {
-        return offendersCollection().get();
+    public static List<Map.Entry<String, Map<String, Object>>> getCasesModifiedSince(long timestamp) throws IOException {
+        String courtId = getCurrentCourtIdOrThrow();
+        return FirebaseRestClient.getInstance().queryGreaterThan(
+                PROJECT_COURTS + "/" + courtId, "cases", "updatedAt", timestamp);
     }
 
-    public static ApiFuture<QuerySnapshot> getAllCases() {
-        return casesCollection().get();
+    public static void pushCase(String docId, Map<String, Object> data) throws IOException {
+        String courtId = getCurrentCourtIdOrThrow();
+        FirebaseRestClient.getInstance().upsertDocument(
+                PROJECT_COURTS + "/" + courtId + "/cases/" + docId, data);
     }
 
-    public static ApiFuture<QuerySnapshot> getOffendersModifiedSince(long timestamp) {
-        return offendersCollection()
-            .whereGreaterThan("updatedAt", timestamp)
-            .get();
-    }
+    // --- Users (for login) ---
 
-    public static ApiFuture<QuerySnapshot> getCasesModifiedSince(long timestamp) {
-        return casesCollection()
-            .whereGreaterThan("updatedAt", timestamp)
-            .get();
-    }
-
-    public static CollectionReference usersCollection(String courtId) {
-        return getFirestore().collection("courts")
-            .document(courtId)
-            .collection("users");
+    public static List<Map.Entry<String, Map<String, Object>>> getUsersByEmail(
+            String courtId, String email) throws IOException {
+        return FirebaseRestClient.getInstance().queryEqual(
+                PROJECT_COURTS + "/" + courtId, "users", "email", email);
     }
 }
