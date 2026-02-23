@@ -7,7 +7,6 @@ import javafx.beans.property.SimpleDoubleProperty;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -96,10 +95,18 @@ public class UpdateDownloader {
                 : findUnixLauncher(installDir);
 
         pb.directory(installDir.toFile());
-        // On Windows the child is launched via START in a .bat, so it already has
-        // its own console/window — don't inherit the dying parent's I/O handles.
-        // On Unix, inherit so shell scripts get a proper terminal.
-        if (!isWindows) pb.inheritIO();
+        if (isWindows) {
+            // Don't inherit parent's I/O handles — the parent is about to die and
+            // JavaFX needs clean handles to initialise its graphics pipeline.
+            // Redirect to a log file so crashes are visible instead of silent.
+            Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
+            Files.createDirectories(logDir);
+            File logFile = logDir.resolve("update-relaunch.log").toFile();
+            pb.redirectErrorStream(true);
+            pb.redirectOutput(logFile);
+        } else {
+            pb.inheritIO();
+        }
         pb.start();
 
         Platform.exit();
@@ -126,27 +133,18 @@ public class UpdateDownloader {
                 return new ProcessBuilder(exeFiles.get(0).toAbsolutePath().toString());
             }
         }
-        // Fallback: fat JAR — user already has Java installed to run this app.
-        // Use javaw.exe (GUI/windowless mode) — java.exe is a console subsystem binary
-        // which prevents JavaFX from initialising its graphics pipeline on Windows.
-        // Also write a .bat that uses START so the child is fully detached from the
-        // dying parent process and doesn't inherit broken I/O handles.
+        // Fallback: fat JAR.
+        // Use javaw.exe located via java.home — this system property is always set by
+        // the JVM and points to the exact JRE running this app, so no PATH dependency.
+        // javaw.exe is the GUI/windowless launcher; java.exe is a console-subsystem
+        // binary that prevents JavaFX from initialising its graphics pipeline on Windows.
         try (var stream = Files.walk(installDir)) {
             var jarFiles = stream
                     .filter(p -> p.toString().toLowerCase().endsWith(".jar"))
                     .toList();
             if (!jarFiles.isEmpty()) {
-                String javaExe = ProcessHandle.current().info().command().orElse("");
-                String javawExe = javaExe.isEmpty()
-                        ? "javaw"
-                        : javaExe.replaceAll("(?i)\\bjava\\.exe$", "javaw.exe");
-
-                Path bat = installDir.resolve("_launch.bat");
-                Files.writeString(bat,
-                        "@echo off\r\nstart \"Records and Tracking\" \""
-                        + javawExe + "\" -jar \""
-                        + jarFiles.get(0).toAbsolutePath() + "\"\r\n");
-                return new ProcessBuilder("cmd", "/c", bat.toAbsolutePath().toString());
+                String javaw = resolveJavaw();
+                return new ProcessBuilder(javaw, "-jar", jarFiles.get(0).toAbsolutePath().toString());
             }
         }
         throw new IOException("No launcher (.bat, .cmd, .exe, or .jar) found in extracted ZIP");
@@ -202,6 +200,25 @@ public class UpdateDownloader {
         }
 
         throw new IOException("No launcher found in extracted ZIP");
+    }
+
+    /**
+     * Returns the absolute path to javaw.exe (Windows) or java (Unix) for the
+     * JRE that is currently running this application. Uses java.home which is
+     * always set by the JVM — no PATH lookups, no process handle parsing.
+     */
+    private String resolveJavaw() {
+        String javaHome = System.getProperty("java.home", "");
+        if (!javaHome.isEmpty()) {
+            boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+            String exeName = isWindows ? "javaw.exe" : "java";
+            Path candidate = Path.of(javaHome, "bin", exeName);
+            if (Files.exists(candidate)) {
+                return candidate.toAbsolutePath().toString();
+            }
+        }
+        // Absolute fallback — should never be reached in practice
+        return System.getProperty("os.name", "").toLowerCase().contains("win") ? "javaw" : "java";
     }
 
     private String findJavaFXPath() {
