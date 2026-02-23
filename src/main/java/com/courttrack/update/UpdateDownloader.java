@@ -66,9 +66,19 @@ public class UpdateDownloader {
      */
     public void launchInstallerAndExit(Path installerPath) throws IOException {
         Path installDir = Path.of(System.getProperty("user.home"), ".courttrack", "updates");
+
+        // Wipe the directory before extracting so stale files from previous update
+        // runs (e.g. generated .bat scripts, old JARs) can never be picked up as launchers.
+        if (Files.exists(installDir)) {
+            try (var stream = Files.walk(installDir)) {
+                stream.sorted(java.util.Comparator.reverseOrder())
+                      .filter(p -> !p.equals(installDir))
+                      .forEach(p -> { try { Files.delete(p); } catch (IOException ignored) {} });
+            }
+        }
         Files.createDirectories(installDir);
 
-        // Extract ZIP, overwriting existing files from previous updates
+        // Extract ZIP fresh
         try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(installerPath))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
