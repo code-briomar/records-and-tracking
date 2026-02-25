@@ -16,6 +16,7 @@ import com.courttrack.util.VersionPreferences;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 import java.net.InetSocketAddress;
@@ -41,6 +42,14 @@ public class App extends Application {
     @Override
     public void start(Stage stage) {
         this.primaryStage = stage;
+
+        // Set window/taskbar icon
+        try {
+            Image icon = new Image(getClass().getResourceAsStream("/icons/app.ico"));
+            stage.getIcons().add(icon);
+        } catch (Exception e) {
+            System.err.println("Could not load app icon: " + e.getMessage());
+        }
 
         // Initialize database
         DatabaseManager.getInstance().initialize();
