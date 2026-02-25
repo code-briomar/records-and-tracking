@@ -4,10 +4,14 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+
+import java.io.InputStream;
 
 public class LoginView {
     private final StackPane root;
@@ -39,8 +43,14 @@ public class LoginView {
         """);
         card.getStyleClass().add("bordered");
 
-        Label icon = new Label("\u2696");
-        icon.setFont(Font.font("System", FontWeight.NORMAL, 44));
+        ImageView icon = new ImageView();
+        icon.setFitWidth(48);
+        icon.setFitHeight(48);
+        icon.setPreserveRatio(true);
+        InputStream iconIs = LoginView.class.getResourceAsStream("/icons/app.ico");
+        if (iconIs != null) {
+            icon.setImage(new Image(iconIs, 48, 48, true, true));
+        }
 
         Label title = new Label("Records & Tracking");
         title.setFont(Font.font("System", FontWeight.BOLD, 18));

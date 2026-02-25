@@ -1,15 +1,9 @@
 # Release Notes
 
-## v0.1.2 - YYYY-MM-DD
-
-### Added
-- (Your new features here)
+## v0.1.4 - 2026-02-25
 
 ### Changed
-- (Your changes here)
-
-### Fixed
-- (Bug fixes here)
+- Login page now shows the app icon (app.ico) instead of the unicode scales character
 
 ---
 
