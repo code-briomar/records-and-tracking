@@ -1,5 +1,12 @@
 # Release Notes
 
+## v0.1.5 - 2026-02-25
+
+### Fixed
+- Update checker now detects releases with `.jar` assets (previously only found `.zip`)
+
+---
+
 ## v0.1.4 - 2026-02-25
 
 ### Changed
