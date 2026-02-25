@@ -62,40 +62,28 @@ public class UpdateChecker {
                 return Optional.empty();
             }
 
-            // Find the right asset for this OS - use .zip for all platforms
-            String extension = ".zip";
-
             JsonArray assets = release.getAsJsonArray("assets");
             String downloadUrl = null;
             long fileSize = -1;
 
-            // Try .zip first (most portable)
-            for (JsonElement el : assets) {
-                JsonObject asset = el.getAsJsonObject();
-                String name = asset.get("name").getAsString();
-                if (name.endsWith(extension)) {
-                    downloadUrl = asset.get("browser_download_url").getAsString();
-                    fileSize = asset.has("size") ? asset.get("size").getAsLong() : -1;
-                    break;
-                }
-            }
-
-            // Fallback: if no platform-specific asset, look for any .zip
-            if (downloadUrl == null) {
+            // Prefer .zip, fall back to .jar
+            String[] preferred = {".zip", ".jar"};
+            outer:
+            for (String ext : preferred) {
                 for (JsonElement el : assets) {
                     JsonObject asset = el.getAsJsonObject();
                     String name = asset.get("name").getAsString();
-                    if (name.endsWith(".zip")) {
+                    if (name.endsWith(ext)) {
                         downloadUrl = asset.get("browser_download_url").getAsString();
                         fileSize = asset.has("size") ? asset.get("size").getAsLong() : -1;
-                        System.out.println("Using fallback ZIP asset: " + name);
-                        break;
+                        System.out.println("Using asset: " + name);
+                        break outer;
                     }
                 }
             }
 
             if (downloadUrl == null) {
-                System.out.println("No matching installer asset found for " + extension);
+                System.out.println("No matching installer asset found (.zip or .jar)");
                 return Optional.empty();
             }
 
