@@ -11,6 +11,9 @@ import com.courttrack.ui.ReleaseNotesDialog;
 import com.courttrack.ui.ThemeManager;
 import com.courttrack.update.UpdateChecker;
 import com.courttrack.update.UpdateInfo;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Properties;
 import com.courttrack.util.AppVersion;
 import com.courttrack.util.VersionPreferences;
 import javafx.application.Application;
@@ -249,29 +252,38 @@ public class App extends Application {
         String currentVersion = AppVersion.getVersion();
         String lastVersion = prefs.getLastVersion();
 
+        // Always update the stored version so future runs know what was last run.
         if (!currentVersion.equals(lastVersion)) {
-            System.out.println("Version changed from " + lastVersion + " to " + currentVersion);
-            
-            // Check for release notes from latest GitHub release
-            new Thread(() -> {
-                try {
-                    UpdateChecker checker = new UpdateChecker();
-                    checker.checkForUpdate().ifPresent(updateInfo -> {
-                        Platform.runLater(() -> {
-                            ReleaseNotesDialog dialog = new ReleaseNotesDialog(
-                                updateInfo.getVersion(),
-                                updateInfo.getReleaseNotes()
-                            );
-                            dialog.showAndWait();
-                        });
-                    });
-                } catch (Exception e) {
-                    System.err.println("Failed to fetch release notes: " + e.getMessage());
-                }
-            }).start();
-
-            // Update the saved version
             prefs.setLastVersion(currentVersion);
+        }
+
+        // Only show the "What's New" dialog when the updater left a pending file,
+        // meaning the user actually just went through an in-app update.
+        // (Skip on fresh install where no pending file exists.)
+        Path pendingFile = Path.of(System.getProperty("user.home"), ".courttrack",
+                "pending-release-notes.properties");
+        if (!Files.exists(pendingFile)) {
+            return;
+        }
+
+        try {
+            Properties props = new Properties();
+            try (var reader = new java.io.FileReader(pendingFile.toFile())) {
+                props.load(reader);
+            }
+            String pendingVersion = props.getProperty("version", "");
+            String notes = props.getProperty("notes", "");
+
+            // Consume the file — dialog is shown at most once.
+            Files.deleteIfExists(pendingFile);
+
+            if (pendingVersion.equals(currentVersion)) {
+                System.out.println("Showing release notes for " + currentVersion);
+                Platform.runLater(() ->
+                        new ReleaseNotesDialog(currentVersion, notes).showAndWait());
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to read pending release notes: " + e.getMessage());
         }
     }
 

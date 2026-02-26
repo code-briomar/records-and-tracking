@@ -172,7 +172,7 @@ public class UpdateNotificationBar extends HBox {
     private void launchInstaller() {
         if (downloadedInstaller != null) {
             try {
-                downloader.launchInstallerAndExit(downloadedInstaller);
+                downloader.launchInstallerAndExit(downloadedInstaller, updateInfo);
             } catch (Exception ex) {
                 System.err.println("Failed to launch installer: " + ex.getMessage());
                 messageLabel.setText("Failed to launch installer: " + ex.getMessage());

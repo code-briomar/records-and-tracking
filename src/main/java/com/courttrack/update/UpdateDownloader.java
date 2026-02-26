@@ -10,6 +10,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Properties;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -61,33 +62,134 @@ public class UpdateDownloader {
     }
 
     /**
-     * Extracts the downloaded ZIP to ~/.courttrack/updates/, finds the appropriate
-     * launcher for the current OS, starts it, and exits the app.
+     * Downloads the new release, replaces the currently-running JAR in-place,
+     * relaunches from the same path, and exits. Also saves release notes so
+     * the next startup can display "What's New".
+     *
+     * @param installerPath path to the downloaded file (.zip or .jar)
+     * @param info          metadata about the new release (version, release notes)
      */
-    public void launchInstallerAndExit(Path installerPath) throws IOException {
-        Path installDir = Path.of(System.getProperty("user.home"), ".courttrack", "updates");
+    public void launchInstallerAndExit(Path installerPath, UpdateInfo info) throws IOException {
+        // Persist release notes so the restarted app can display them.
+        savePendingReleaseNotes(info);
 
-        // Wipe the directory before extracting so stale files from previous update
-        // runs (e.g. generated .bat scripts, old JARs) can never be picked up as launchers.
-        if (Files.exists(installDir)) {
-            try (var stream = Files.walk(installDir)) {
+        String fileName = installerPath.getFileName().toString().toLowerCase();
+        Path newJar;
+
+        if (fileName.endsWith(".jar")) {
+            // The downloaded file IS the new fat JAR — use it directly.
+            newJar = installerPath;
+        } else {
+            // ZIP containing the fat JAR — extract it first.
+            Path installDir = Path.of(System.getProperty("user.home"), ".courttrack", "updates");
+            extractZip(installerPath, installDir);
+            newJar = findJarInDir(installDir);
+        }
+
+        // Determine where to launch from.
+        // Best case: overwrite the JAR the user normally launches so future
+        // launches automatically use the new version.
+        Path currentJar = getCurrentJarPath();
+        Path launchJar;
+
+        if (newJar != null && currentJar != null) {
+            replaceJar(newJar, currentJar);
+            launchJar = currentJar;
+        } else if (newJar != null) {
+            // Running from IDE/classpath — can't determine the on-disk JAR.
+            // Just launch the new JAR from where it already is.
+            launchJar = newJar;
+        } else {
+            throw new IOException("Could not locate the new JAR to launch");
+        }
+
+        String java = resolveJavaw();
+        ProcessBuilder pb = new ProcessBuilder(java, "-jar", launchJar.toAbsolutePath().toString());
+        pb.directory(launchJar.getParent().toFile());
+
+        String osName = System.getProperty("os.name", "").toLowerCase();
+        if (osName.contains("win")) {
+            Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
+            Files.createDirectories(logDir);
+            pb.redirectErrorStream(true);
+            pb.redirectOutput(logDir.resolve("update-relaunch.log").toFile());
+        } else {
+            pb.inheritIO();
+        }
+
+        pb.start();
+        Platform.exit();
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Returns the path of the JAR currently running this code, or null when
+     * running from an exploded classpath (IDE / Maven exec).
+     */
+    private Path getCurrentJarPath() {
+        try {
+            URL location = UpdateDownloader.class.getProtectionDomain()
+                    .getCodeSource().getLocation();
+            Path p = Path.of(location.toURI());
+            if (p.toString().toLowerCase().endsWith(".jar") && Files.isRegularFile(p)) {
+                return p;
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    /**
+     * Copies {@code newJar} over {@code target}.
+     * On Windows the running JAR is locked; rename it away first (NTFS allows
+     * renaming open files), then copy the new one into place.
+     */
+    private void replaceJar(Path newJar, Path target) throws IOException {
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (isWindows) {
+            Path backup = target.resolveSibling(target.getFileName() + ".old");
+            Files.move(target, backup, StandardCopyOption.REPLACE_EXISTING);
+        }
+        Files.copy(newJar, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /**
+     * Saves version + release notes to ~/.courttrack/pending-release-notes.properties
+     * so the next app startup can display the "What's New" dialog for the correct
+     * version without hitting the network again.
+     */
+    public void savePendingReleaseNotes(UpdateInfo info) {
+        try {
+            Path dir = Path.of(System.getProperty("user.home"), ".courttrack");
+            Files.createDirectories(dir);
+            Path file = dir.resolve("pending-release-notes.properties");
+            Properties props = new Properties();
+            props.setProperty("version", info.getVersion());
+            props.setProperty("notes", info.getReleaseNotes() != null ? info.getReleaseNotes() : "");
+            try (OutputStream os = new FileOutputStream(file.toFile())) {
+                props.store(os, null);
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to save pending release notes: " + e.getMessage());
+        }
+    }
+
+    /** Extracts a ZIP to {@code destDir}, wiping it clean first. */
+    private void extractZip(Path zipPath, Path destDir) throws IOException {
+        if (Files.exists(destDir)) {
+            try (var stream = Files.walk(destDir)) {
                 stream.sorted(java.util.Comparator.reverseOrder())
-                      .filter(p -> !p.equals(installDir))
+                      .filter(p -> !p.equals(destDir))
                       .forEach(p -> { try { Files.delete(p); } catch (IOException ignored) {} });
             }
         }
-        Files.createDirectories(installDir);
+        Files.createDirectories(destDir);
 
-        // Extract ZIP fresh
-        try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(installerPath))) {
+        try (ZipInputStream zis = new ZipInputStream(Files.newInputStream(zipPath))) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                Path outPath = installDir.resolve(entry.getName()).normalize();
-                // Guard against path traversal attacks (e.g. ../../malicious)
-                if (!outPath.startsWith(installDir)) {
-                    zis.closeEntry();
-                    continue;
-                }
+                Path outPath = destDir.resolve(entry.getName()).normalize();
+                if (!outPath.startsWith(destDir)) { zis.closeEntry(); continue; }
                 if (entry.isDirectory()) {
                     Files.createDirectories(outPath);
                 } else {
@@ -97,119 +199,18 @@ public class UpdateDownloader {
                 zis.closeEntry();
             }
         }
-
-        String osName = System.getProperty("os.name", "").toLowerCase();
-        boolean isWindows = osName.contains("win");
-        ProcessBuilder pb = isWindows
-                ? findWindowsLauncher(installDir)
-                : findUnixLauncher(installDir);
-
-        pb.directory(installDir.toFile());
-        if (isWindows) {
-            // Don't inherit parent's I/O handles — the parent is about to die and
-            // JavaFX needs clean handles to initialise its graphics pipeline.
-            // Redirect to a log file so crashes are visible instead of silent.
-            Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
-            Files.createDirectories(logDir);
-            File logFile = logDir.resolve("update-relaunch.log").toFile();
-            pb.redirectErrorStream(true);
-            pb.redirectOutput(logFile);
-        } else {
-            pb.inheritIO();
-        }
-        pb.start();
-
-        Platform.exit();
     }
 
-    private ProcessBuilder findWindowsLauncher(Path installDir) throws IOException {
-        // Walk recursively — handles ZIPs that extract into a subdirectory
-        try (var stream = Files.walk(installDir)) {
-            var batFiles = stream
-                    .filter(p -> {
-                        String s = p.toString().toLowerCase();
-                        return s.endsWith(".bat") || s.endsWith(".cmd");
-                    })
-                    .toList();
-            if (!batFiles.isEmpty()) {
-                return new ProcessBuilder("cmd", "/c", batFiles.get(0).toAbsolutePath().toString());
-            }
+    /** Finds the first {@code .jar} file under {@code dir} (recursive). */
+    private Path findJarInDir(Path dir) {
+        try (var stream = Files.walk(dir)) {
+            return stream
+                    .filter(p -> p.toString().toLowerCase().endsWith(".jar") && Files.isRegularFile(p))
+                    .findFirst()
+                    .orElse(null);
+        } catch (IOException e) {
+            return null;
         }
-        try (var stream = Files.walk(installDir)) {
-            var exeFiles = stream
-                    .filter(p -> p.toString().toLowerCase().endsWith(".exe"))
-                    .toList();
-            if (!exeFiles.isEmpty()) {
-                return new ProcessBuilder(exeFiles.get(0).toAbsolutePath().toString());
-            }
-        }
-        // Fallback: fat JAR.
-        // Use javaw.exe located via java.home — this system property is always set by
-        // the JVM and points to the exact JRE running this app, so no PATH dependency.
-        // javaw.exe is the GUI/windowless launcher; java.exe is a console-subsystem
-        // binary that prevents JavaFX from initialising its graphics pipeline on Windows.
-        try (var stream = Files.walk(installDir)) {
-            var jarFiles = stream
-                    .filter(p -> p.toString().toLowerCase().endsWith(".jar"))
-                    .toList();
-            if (!jarFiles.isEmpty()) {
-                String javaw = resolveJavaw();
-                return new ProcessBuilder(javaw, "-jar", jarFiles.get(0).toAbsolutePath().toString());
-            }
-        }
-        throw new IOException("No launcher (.bat, .cmd, .exe, or .jar) found in extracted ZIP");
-    }
-
-    private ProcessBuilder findUnixLauncher(Path installDir) throws IOException {
-        // jpackage: look for an executable in any bin/ subdirectory
-        try (var stream = Files.walk(installDir)) {
-            var binaries = stream
-                    .filter(p -> p.getParent() != null
-                            && p.getParent().getFileName() != null
-                            && p.getParent().getFileName().toString().equals("bin")
-                            && !p.getFileName().toString().contains(".")
-                            && Files.isRegularFile(p))
-                    .toList();
-            if (!binaries.isEmpty()) {
-                Path launcher = binaries.get(0);
-                launcher.toFile().setExecutable(true);
-                return new ProcessBuilder(launcher.toAbsolutePath().toString());
-            }
-        }
-
-        // Try well-known shell script name first
-        Path namedScript = installDir.resolve("records-and-tracking.sh");
-        if (Files.exists(namedScript)) {
-            namedScript.toFile().setExecutable(true);
-            return new ProcessBuilder("/bin/bash", namedScript.toAbsolutePath().toString());
-        }
-
-        // Walk recursively for any .sh
-        try (var stream = Files.walk(installDir)) {
-            var shFiles = stream.filter(p -> p.toString().endsWith(".sh")).toList();
-            if (!shFiles.isEmpty()) {
-                shFiles.get(0).toFile().setExecutable(true);
-                return new ProcessBuilder("/bin/bash", shFiles.get(0).toAbsolutePath().toString());
-            }
-        }
-
-        // Fallback: run JAR directly with JavaFX on the module path
-        try (var stream = Files.walk(installDir)) {
-            var jarFiles = stream.filter(p -> p.toString().endsWith(".jar")).toList();
-            if (!jarFiles.isEmpty()) {
-                String javafxPath = findJavaFXPath();
-                if (javafxPath != null) {
-                    return new ProcessBuilder(
-                            "java", "--module-path", javafxPath,
-                            "--add-modules", "javafx.controls,javafx.graphics",
-                            "-jar", jarFiles.get(0).toAbsolutePath().toString()
-                    );
-                }
-                throw new IOException("JavaFX not found. Please install OpenJFX.");
-            }
-        }
-
-        throw new IOException("No launcher found in extracted ZIP");
     }
 
     /**
@@ -229,41 +230,5 @@ public class UpdateDownloader {
         }
         // Absolute fallback — should never be reached in practice
         return System.getProperty("os.name", "").toLowerCase().contains("win") ? "javaw" : "java";
-    }
-
-    private String findJavaFXPath() {
-        return findInMavenRepo(System.getProperty("user.home") + "/.m2/repository/org/openjfx");
-    }
-
-    private String findInMavenRepo(String basePath) {
-        try {
-            Path base = Path.of(basePath);
-            if (!Files.exists(base)) return null;
-
-            String osName = System.getProperty("os.name", "").toLowerCase();
-            String classifier = osName.contains("win") ? "-win.jar" : "-linux.jar";
-            String pathSeparator = osName.contains("win") ? ";" : ":";
-
-            String[] artifacts = {"javafx-controls", "javafx-graphics", "javafx-base"};
-            StringBuilder sb = new StringBuilder();
-
-            for (String artifact : artifacts) {
-                try (var stream = Files.walk(base, 3)) {
-                    var matches = stream
-                            .filter(p -> p.toString().contains(artifact) && p.toString().endsWith(classifier))
-                            .toList();
-                    if (!matches.isEmpty()) {
-                        if (sb.length() > 0) sb.append(pathSeparator);
-                        sb.append(matches.get(0).toAbsolutePath());
-                    } else {
-                        return null;
-                    }
-                }
-            }
-
-            return sb.length() > 0 ? sb.toString() : null;
-        } catch (Exception e) {
-            return null;
-        }
     }
 }

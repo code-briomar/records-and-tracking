@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.1.6 - 2026-02-27
+
+ ### Fixed
+ - Update now replaces the original JAR in-place so re-launching the app always uses the new version
+ - Release notes dialog no longer appears on fresh installs or shows the wrong version
+
+ ---
+
+
 ## v0.1.5 - 2026-02-25
 
 ### Fixed
