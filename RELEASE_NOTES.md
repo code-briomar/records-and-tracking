@@ -1,5 +1,13 @@
 # Release Notes
 
+## v0.1.7 - 2026-02-27
+
+ ### Changed
+ - Version bump for update system test
+
+ ---
+
+
 ## v0.1.6 - 2026-02-27
 
  ### Fixed
