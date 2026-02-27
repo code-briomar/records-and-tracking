@@ -10,6 +10,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -86,39 +87,92 @@ public class UpdateDownloader {
             newJar = findJarInDir(installDir);
         }
 
-        // Determine where to launch from.
-        // Best case: overwrite the JAR the user normally launches so future
-        // launches automatically use the new version.
+        if (newJar == null) throw new IOException("Could not locate the new JAR to launch");
+
         Path currentJar = getCurrentJarPath();
-        Path launchJar;
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
 
-        if (newJar != null && currentJar != null) {
-            replaceJar(newJar, currentJar);
-            launchJar = currentJar;
-        } else if (newJar != null) {
-            // Running from IDE/classpath — can't determine the on-disk JAR.
-            // Just launch the new JAR from where it already is.
-            launchJar = newJar;
-        } else {
-            throw new IOException("Could not locate the new JAR to launch");
+        if (isWindows && currentJar != null) {
+            // On Windows the JVM holds a read lock on the running JAR — neither rename
+            // nor overwrite works. Delegate the swap + relaunch to a batch script that
+            // runs after we exit and the lock is released.
+            relaunchViaScript(newJar, currentJar);
+            Platform.exit();
+            return;
         }
 
-        String java = resolveJavaw();
-        ProcessBuilder pb = new ProcessBuilder(java, "-jar", launchJar.toAbsolutePath().toString());
-        pb.directory(launchJar.getParent().toFile());
-
-        String osName = System.getProperty("os.name", "").toLowerCase();
-        if (osName.contains("win")) {
-            Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
-            Files.createDirectories(logDir);
-            pb.redirectErrorStream(true);
-            pb.redirectOutput(logDir.resolve("update-relaunch.log").toFile());
-        } else {
-            pb.inheritIO();
+        // Linux/macOS: in-place copy is safe even for a running JAR.
+        Path launchJar = (currentJar != null) ? currentJar : newJar;
+        if (currentJar != null) {
+            Files.copy(newJar, currentJar, StandardCopyOption.REPLACE_EXISTING);
         }
-
-        pb.start();
+        new ProcessBuilder(resolveJavaw(), "-jar", launchJar.toAbsolutePath().toString())
+                .directory(launchJar.getParent().toFile())
+                .inheritIO()
+                .start();
         Platform.exit();
+    }
+
+    /**
+     * Windows trampoline: stages the new JAR next to the original, writes a .bat
+     * that waits for the lock to clear then swaps the files and relaunches, and
+     * starts the bat detached so it survives this process exiting.
+     */
+    private void relaunchViaScript(Path newJar, Path target) throws IOException {
+        // Stage next to the target (same drive → instant copy, no cross-device move needed)
+        Path staged = target.resolveSibling(target.getFileName() + ".update");
+        Files.copy(newJar, staged, StandardCopyOption.REPLACE_EXISTING);
+
+        Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
+        Files.createDirectories(logDir);
+        Path log = logDir.resolve("update-relaunch.log");
+        Path bat = logDir.resolve("do-update.bat");
+
+        // Prefer relaunching via the jpackage native EXE if that's how we were started.
+        String nativeLauncher = getNativeLauncher();
+        String launchLine = (nativeLauncher != null)
+                ? "start \"CourtTrack\" \"" + nativeLauncher + "\""
+                : "start \"CourtTrack\" \"" + resolveJavaw() + "\" -jar \""
+                        + target.toAbsolutePath() + "\"";
+
+        String nl = "\r\n";
+        String script =
+            "@echo off" + nl +
+            // ~3 s — enough for the JVM to fully shut down and release the file lock
+            "ping -n 4 127.0.0.1 >nul" + nl +
+            "copy /y \"" + staged.toAbsolutePath() + "\" \""
+                    + target.toAbsolutePath() + "\" >>\"" + log.toAbsolutePath() + "\" 2>&1" + nl +
+            "if errorlevel 1 (" + nl +
+            "  echo [ERROR] copy failed >>\"" + log.toAbsolutePath() + "\"" + nl +
+            "  exit /b 1" + nl +
+            ")" + nl +
+            "del \"" + staged.toAbsolutePath() + "\" >nul 2>&1" + nl +
+            launchLine + nl;
+
+        Files.writeString(bat, script);
+
+        // `start "" /min <bat>` opens the script in a detached minimised console window
+        // so it continues running after this JVM exits.
+        new ProcessBuilder("cmd", "/c", "start", "", "/min", bat.toAbsolutePath().toString())
+                .start();
+    }
+
+    /**
+     * Returns the path to the native launcher EXE if the app was started via
+     * a jpackage-generated executable, or null if started directly with java/javaw.
+     */
+    private String getNativeLauncher() {
+        try {
+            Optional<String> cmd = ProcessHandle.current().info().command();
+            if (cmd.isPresent()) {
+                String c = cmd.get();
+                String name = Path.of(c).getFileName().toString().toLowerCase();
+                if (!name.equals("java.exe") && !name.equals("javaw.exe") && name.endsWith(".exe")) {
+                    return c;
+                }
+            }
+        } catch (Exception ignored) {}
+        return null;
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -137,20 +191,6 @@ public class UpdateDownloader {
             }
         } catch (Exception ignored) {}
         return null;
-    }
-
-    /**
-     * Copies {@code newJar} over {@code target}.
-     * On Windows the running JAR is locked; rename it away first (NTFS allows
-     * renaming open files), then copy the new one into place.
-     */
-    private void replaceJar(Path newJar, Path target) throws IOException {
-        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
-        if (isWindows) {
-            Path backup = target.resolveSibling(target.getFileName() + ".old");
-            Files.move(target, backup, StandardCopyOption.REPLACE_EXISTING);
-        }
-        Files.copy(newJar, target, StandardCopyOption.REPLACE_EXISTING);
     }
 
     /**

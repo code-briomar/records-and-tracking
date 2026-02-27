@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.1.8 - 2026-02-27
+
+### Fixed
+- Update on Windows now works for both direct JAR and MSI (jpackage) installs
+- Uses a batch-script trampoline to swap the JAR after the JVM exits and releases its file lock
+- Relaunches via the native EXE launcher when installed via MSI, preserving the Start Menu shortcut
+
+---
+
 ## v0.1.7 - 2026-02-27
 
  ### Changed
