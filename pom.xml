@@ -177,7 +177,7 @@
                     <input>${project.build.directory}/jpackage-input</input>
                     <mainJar>${project.artifactId}-${project.version}.jar</mainJar>
                     <mainClass>com.courttrack.AppLauncher</mainClass>
-                    <type>msi</type>
+                    <type>MSI</type>
                     <icon>src/main/resources/icons/app.ico</icon>
                     <destination>${project.build.directory}/jpackage</destination>
                     <winMenu>true</winMenu>
