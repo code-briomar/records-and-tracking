@@ -183,6 +183,7 @@
                     <winMenu>true</winMenu>
                     <winShortcut>true</winShortcut>
                     <winMenuGroup>CourtTrack</winMenuGroup>
+                    <winPerUserInstall>true</winPerUserInstall>
                 </configuration>
             </plugin>
             <plugin>

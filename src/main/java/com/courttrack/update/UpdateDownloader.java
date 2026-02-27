@@ -119,8 +119,11 @@ public class UpdateDownloader {
      * starts the bat detached so it survives this process exiting.
      */
     private void relaunchViaScript(Path newJar, Path target) throws IOException {
-        // Stage next to the target (same drive → instant copy, no cross-device move needed)
-        Path staged = target.resolveSibling(target.getFileName() + ".update");
+        // Stage in the user's writable .courttrack dir rather than next to the target,
+        // which may be in Program Files and require elevation to write.
+        Path stageDir = Path.of(System.getProperty("user.home"), ".courttrack", "updates");
+        Files.createDirectories(stageDir);
+        Path staged = stageDir.resolve(target.getFileName() + ".update");
         Files.copy(newJar, staged, StandardCopyOption.REPLACE_EXISTING);
 
         Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
@@ -147,7 +150,8 @@ public class UpdateDownloader {
             "  exit /b 1" + nl +
             ")" + nl +
             "del \"" + staged.toAbsolutePath() + "\" >nul 2>&1" + nl +
-            launchLine + nl;
+            launchLine + nl +
+            "exit" + nl;
 
         Files.writeString(bat, script);
 
@@ -204,7 +208,8 @@ public class UpdateDownloader {
             Files.createDirectories(dir);
             Path file = dir.resolve("pending-release-notes.properties");
             Properties props = new Properties();
-            props.setProperty("version", info.getVersion());
+            // Strip leading "v" so it matches AppVersion.getVersion() (e.g. "0.1.9" not "v0.1.9")
+            props.setProperty("version", info.getVersion().replaceFirst("^v", ""));
             props.setProperty("notes", info.getReleaseNotes() != null ? info.getReleaseNotes() : "");
             try (OutputStream os = new FileOutputStream(file.toFile())) {
                 props.store(os, null);
