@@ -1,5 +1,7 @@
 package com.courttrack;
 
+import java.io.IOException;
+
 import com.courttrack.db.DatabaseManager;
 import com.courttrack.sync.CourtContext;
 import com.courttrack.sync.FirestoreContext;
@@ -11,12 +13,15 @@ import com.courttrack.ui.ReleaseNotesDialog;
 import com.courttrack.ui.ThemeManager;
 import com.courttrack.ui.Toast;
 import com.courttrack.update.UpdateChecker;
-import com.courttrack.update.UpdateInfo;
+// import com.courttrack.update.UpdateInfo;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
+
 import com.courttrack.util.AppVersion;
 import com.courttrack.util.VersionPreferences;
+
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -27,10 +32,11 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.util.Base64;
-import java.util.List;
+// import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -88,7 +94,7 @@ public class App extends Application {
         new Thread(() -> {
             boolean isOnline = checkOnline();
 
-            Map<String, Object> userData = null;
+            Map<String, Object> userData;
 
             try {
                 // 1. Try offline login first (localDB)
@@ -100,7 +106,14 @@ public class App extends Application {
                     if (!docs.isEmpty()) {
                         userData = docs.get(0).getValue();
                         // Save to local for future offline use
-                        saveUserToLocal(userData);
+                        String userId = (String) userData.get("id");
+                        String fullName = (String) userData.getOrDefault("fullName", "");
+                        String role = (String) userData.getOrDefault("role", "CLERK");
+                        String courtIdLocal = (String) userData.get("courtId");
+                        String courtNameLocal = (String) userData.getOrDefault("courtName", courtIdLocal);
+                        String passwordHash = (String) userData.get("passwordHash");
+                        String salt = (String) userData.get("salt");
+                        upsertLocalUser(userId, email, fullName, courtIdLocal, courtNameLocal, role, passwordHash, salt);
                     }
                 }
 
@@ -138,13 +151,13 @@ public class App extends Application {
 
                 // 6. Success - bind context and show main view
                 CourtContext.getInstance().bind(courtId, courtName, userId, email, role);
-                SyncStatus.getInstance().set(SyncStatus.SYNCING, isOnline ? "Connected" : "Offline");
+                SyncStatus.getInstance().set(SyncStatus.State.SYNCING, isOnline ? "Connected" : "Offline");
 
                 Platform.runLater(() -> {
                     loginView.setLoading(false);
                     mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
                     Scene scene = new Scene(mainView.getRoot(), 1200, 800);
-                    addSuplementalClass(scene);
+                    addSupplementalCss(scene);
                     primaryStage.setScene(scene);
                     if (isOnline) {
                         checkAndShowReleaseNotes();
@@ -155,12 +168,12 @@ public class App extends Application {
                 // 7. Sync if online
                 if (isOnline) {
                     Thread.sleep(2000);
-                    SyncCordinator.getInstance().syncAll();
+                    SyncCoordinator.getInstance().syncAll();
                 }
 
                 startConnectivityChecker();
-            } catch (Exception e) {
-                Platform.runLater(() -> Toast.showError("Login failed: " + e.getMessage));
+            } catch (IOException | InterruptedException e) {
+                Platform.runLater(() -> Toast.showError("Login failed: " + e.getMessage()));
             }
         }).start();
     }
@@ -211,7 +224,7 @@ public class App extends Application {
             byte[] hashedBytes = md.digest(inputPassword.getBytes(StandardCharsets.UTF_8));
             String computedHash = Base64.getEncoder().encodeToString(hashedBytes);
             return computedHash.equals(storedHash);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
             System.err.println("Password verification error: " + e.getMessage());
             return false;
         }
@@ -269,23 +282,6 @@ public class App extends Application {
         }
     }
 
-    private void saveUserToLocal(Map<String, Object> userData) {
-        try {
-            String userId = (String) userData.get("id");
-            String email = (String) userData.get("email");
-            String fullName = (String) userData.getOrDefault("fullName", "");
-            String role = (String) userData.getOrDefault("role", "CLERK");
-            String courtId = (String) userData.get("courtId");
-            String courtName = (String) userData.getOrDefault("courtName", courtId);
-            String passwordHash = (String) userData.get("passwordHash");
-            String salt = (String) userData.get("salt");
-
-            upsertLocalUser(userId, email, fullName, courtId, courtName, role, passwordHash, salt);
-        } catch (Exception e) {
-            System.err.println("Failed to save user to local: " + e.getMessage());
-        }
-    }
-
     private void addSupplementalCss(Scene scene) {
         ThemeManager tm = ThemeManager.getInstance();
         String css = getClass().getResource(tm.getSupplementalCssPath()).toExternalForm();
@@ -327,7 +323,7 @@ public class App extends Application {
                 Platform.runLater(()
                         -> new ReleaseNotesDialog(currentVersion, notes).showAndWait());
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.err.println("Failed to read pending release notes: " + e.getMessage());
         }
     }
