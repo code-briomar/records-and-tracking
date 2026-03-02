@@ -1,6 +1,21 @@
 package com.courttrack;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.util.Base64;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import com.courttrack.db.DatabaseManager;
 import com.courttrack.sync.CourtContext;
@@ -13,12 +28,6 @@ import com.courttrack.ui.ReleaseNotesDialog;
 import com.courttrack.ui.ThemeManager;
 import com.courttrack.ui.Toast;
 import com.courttrack.update.UpdateChecker;
-// import com.courttrack.update.UpdateInfo;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Properties;
-
 import com.courttrack.util.AppVersion;
 import com.courttrack.util.VersionPreferences;
 
@@ -28,26 +37,14 @@ import javafx.scene.Scene;
 import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
-import java.net.InetSocketAddress;
-import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.util.Base64;
-// import java.util.List;
-import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-
 public class App extends Application {
 
     private Stage primaryStage;
     private LoginView loginView;
     private MainView mainView;
     private ScheduledExecutorService connectivityChecker;
+    private VersionPreferences prefs;
+
     private ScheduledExecutorService updateChecker;
 
     @Override
@@ -62,6 +59,14 @@ public class App extends Application {
             System.err.println("Could not load app icon: " + e.getMessage());
         }
 
+        prefs = VersionPreferences.getInstance();
+// Try auto-login with saved session
+        if (prefs.hasSession()) {
+            if (tryAutoLogin()) {
+                return; // Already showed main view
+            }
+        }
+
         // Initialize database
         DatabaseManager.getInstance().initialize();
 
@@ -69,6 +74,8 @@ public class App extends Application {
         ThemeManager.getInstance().applyTheme();
 
         showLogin();
+
+        CourtContext.getInstance().unbind();
 
         stage.setTitle("Records & Tracking System");
         stage.setMinWidth(1000);
@@ -146,6 +153,11 @@ public class App extends Application {
                 String status = (String) userData.getOrDefault("status", "ACTIVE");
                 String courtName = (String) userData.getOrDefault("courtName", courtId);
 
+                // Save session for auto-login
+                prefs.setLastCourtId(courtId);
+                prefs.setLastEmail(email);
+                prefs.setLastUserId(userId);
+                prefs.setLastFullName(fullName);
                 if (!"ACTIVE".equalsIgnoreCase(status)) {
                     Platform.runLater(() -> Toast.showError("Account is not active"));
                     return;
@@ -178,6 +190,48 @@ public class App extends Application {
                 Platform.runLater(() -> Toast.showError("Login failed: " + e.getMessage()));
             }
         }).start();
+    }
+
+    private boolean tryAutoLogin() {
+        String courtId = prefs.getLastCourtId();
+        String email = prefs.getLastEmail();
+
+        if (courtId.isEmpty() || email.isEmpty()) {
+            return false;
+        }
+
+        Map<String, Object> userData = findLocalUser(courtId, email);
+        if (userData == null) {
+            return false;
+        }
+
+        String userId = (String) userData.get("userId");
+        String fullName = (String) userData.getOrDefault("fullName", "");
+        String role = (String) userData.get("role");
+        String courtName = (String) userData.getOrDefault("courtName", courtId);
+        String status = (String) userData.getOrDefault("status", "ACTIVE");
+
+        if (!"ACTIVE".equalsIgnoreCase(status)) {
+            return false;
+        }
+
+        CourtContext.getInstance().bind(courtId, courtName, userId, email, role);
+        boolean isOnline = checkOnline();
+        SyncStatus.getInstance().set(SyncStatus.State.SYNCING, isOnline ? "Connected" : "Offline");
+
+        Platform.runLater(() -> {
+            mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
+            Scene scene = new Scene(mainView.getRoot(), 1200, 800);
+            addSupplementalCss(scene);
+            primaryStage.setScene(scene);
+            if (isOnline) {
+                checkAndShowReleaseNotes();
+                scheduleUpdateCheck();
+            }
+        });
+
+        startConnectivityChecker();
+        return true;
     }
 
     private void startConnectivityChecker() {

@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.util.Properties;
 
 public class VersionPreferences {
+
     private static final String PREFS_FILE = ".courttrack_version.properties";
     private static VersionPreferences instance;
     private final Properties props = new Properties();
@@ -62,6 +63,54 @@ public class VersionPreferences {
 
     public void setLastReleaseNotes(String notes) {
         props.setProperty("lastReleaseNotes", notes);
+        save();
+    }
+
+    public String getLastCourtId() {
+        return props.getProperty("lastCourtId", "");
+    }
+
+    public void setLastCourtId(String courtId) {
+        props.setProperty("lastCourtId", courtId);
+        save();
+    }
+
+    public String getLastEmail() {
+        return props.getProperty("lastEmail", "");
+    }
+
+    public void setLastEmail(String email) {
+        props.setProperty("lastEmail", email);
+        save();
+    }
+
+    public String getLastUserId() {
+        return props.getProperty("lastUserId", "");
+    }
+
+    public void setLastUserId(String userId) {
+        props.setProperty("lastUserId", userId);
+        save();
+    }
+
+    public String getLastFullName() {
+        return props.getProperty("lastFullName", "");
+    }
+
+    public void setLastFullName(String fullName) {
+        props.setProperty("lastFullName", fullName);
+        save();
+    }
+
+    public boolean hasSession() {
+        return !getLastCourtId().isEmpty() && !getLastEmail().isEmpty();
+    }
+
+    public void clearSession() {
+        props.remove("lastCourtId");
+        props.remove("lastEmail");
+        props.remove("lastUserId");
+        props.remove("lastFullName");
         save();
     }
 }
