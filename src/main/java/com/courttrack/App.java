@@ -130,37 +130,37 @@ public class App extends Application {
                 String role = (String) userData.get("role");
                 String status = (String) userData.getOrDefault("status", "ACTIVE");
                 String courtName = (String) userData.getOrDefault("courtName", courtId);
-                
-                if(!"ACTIVE".equalsIgnoreCase(status)){
-                    Platform.runLater(()->Toast.showError("Account is not active"));
+
+                if (!"ACTIVE".equalsIgnoreCase(status)) {
+                    Platform.runLater(() -> Toast.showError("Account is not active"));
                     return;
                 }
 
                 // 6. Success - bind context and show main view
                 CourtContext.getInstance().bind(courtId, courtName, userId, email, role);
-                SyncStatus.getInstance().set(SyncStatus.SYNCING, isOnline ? "Connected":"Offline");
+                SyncStatus.getInstance().set(SyncStatus.SYNCING, isOnline ? "Connected" : "Offline");
 
-                Platform.runLater(()->{
+                Platform.runLater(() -> {
                     loginView.setLoading(false);
                     mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
                     Scene scene = new Scene(mainView.getRoot(), 1200, 800);
                     addSuplementalClass(scene);
                     primaryStage.setScene(scene);
-                    if(isOnline){
+                    if (isOnline) {
                         checkAndShowReleaseNotes();
                         scheduleUpdateCheck();
                     }
                 });
 
                 // 7. Sync if online
-                if(isOnline){
+                if (isOnline) {
                     Thread.sleep(2000);
                     SyncCordinator.getInstance().syncAll();
                 }
 
                 startConnectivityChecker();
-            } catch (Exception e){
-                Platform.runLater(()->Toast.showError("Login failed: "+e.getMessage));
+            } catch (Exception e) {
+                Platform.runLater(() -> Toast.showError("Login failed: " + e.getMessage));
             }
         }).start();
     }
@@ -244,30 +244,48 @@ public class App extends Application {
     }
 
     private void upsertLocalUser(String userId, String email, String fullName, String courtId, String courtName, String role, String passwordHash, String salt) {
-    try (Connection conn = DatabaseManager.getInstance().getConnection()) {
-        // Ensure court exists locally first (satisfies the FK constraint on app_user)
-        String courtSql = "MERGE INTO court (court_id, name, is_active) KEY(court_id) VALUES (?, ?, TRUE)";
-        try (PreparedStatement ps = conn.prepareStatement(courtSql)) {
-            ps.setString(1, courtId);
-            ps.setString(2, courtName);
-            ps.executeUpdate();
+        try (Connection conn = DatabaseManager.getInstance().getConnection()) {
+            // Ensure court exists locally first (satisfies the FK constraint on app_user)
+            String courtSql = "MERGE INTO court (court_id, name, is_active) KEY(court_id) VALUES (?, ?, TRUE)";
+            try (PreparedStatement ps = conn.prepareStatement(courtSql)) {
+                ps.setString(1, courtId);
+                ps.setString(2, courtName);
+                ps.executeUpdate();
+            }
+            String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, password_hash, salt, last_login_date, updated_at) "
+                    + "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+            try (PreparedStatement ps = conn.prepareStatement(userSql)) {
+                ps.setString(1, userId);
+                ps.setString(2, email);
+                ps.setString(3, fullName);
+                ps.setString(4, courtId);
+                ps.setString(5, role);
+                ps.setString(6, passwordHash);
+                ps.setString(7, salt);
+                ps.executeUpdate();
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to upsert local user: " + e.getMessage());
         }
-        String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, password_hash, salt, last_login_date, updated_at) "
-                + "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
-        try (PreparedStatement ps = conn.prepareStatement(userSql)) {
-            ps.setString(1, userId);
-            ps.setString(2, email);
-            ps.setString(3, fullName);
-            ps.setString(4, courtId);
-            ps.setString(5, role);
-            ps.setString(6, passwordHash);
-            ps.setString(7, salt);
-            ps.executeUpdate();
-        }
-    } catch (Exception e) {
-        System.err.println("Failed to upsert local user: " + e.getMessage());
     }
-}
+
+    private void saveUserToLocal(Map<String, Object> userData) {
+        try {
+            String userId = (String) userData.get("id");
+            String email = (String) userData.get("email");
+            String fullName = (String) userData.getOrDefault("fullName", "");
+            String role = (String) userData.getOrDefault("role", "CLERK");
+            String courtId = (String) userData.get("courtId");
+            String courtName = (String) userData.getOrDefault("courtName", courtId);
+            String passwordHash = (String) userData.get("passwordHash");
+            String salt = (String) userData.get("salt");
+
+            upsertLocalUser(userId, email, fullName, courtId, courtName, role, passwordHash, salt);
+        } catch (Exception e) {
+            System.err.println("Failed to save user to local: " + e.getMessage());
+        }
+    }
+
     private void addSupplementalCss(Scene scene) {
         ThemeManager tm = ThemeManager.getInstance();
         String css = getClass().getResource(tm.getSupplementalCssPath()).toExternalForm();
