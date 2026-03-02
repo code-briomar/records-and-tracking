@@ -25,7 +25,7 @@
 
 /* ---- Bordered card helper ---- */
 .bordered {
-    -fx-border-color: -color-border-default;
+    -fx-border-color: #37352f;
     -fx-border-radius: 6;
     -fx-background-radius: 6;
 }
