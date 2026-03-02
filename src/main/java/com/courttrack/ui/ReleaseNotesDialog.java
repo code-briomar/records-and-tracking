@@ -23,8 +23,8 @@ public class ReleaseNotesDialog {
         dialog.setTitle("What's New in " + version);
         dialog.setHeaderText("Welcome to " + version);
         dialog.initModality(Modality.APPLICATION_MODAL);
-        dialog.getDialogPane().setPrefWidth(500);
-        dialog.getDialogPane().setPrefHeight(400);
+        dialog.getDialogPane().setPrefWidth(700);
+        dialog.getDialogPane().setPrefHeight(500);
 
         ButtonType closeButton = new ButtonType("Got it!", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().add(closeButton);

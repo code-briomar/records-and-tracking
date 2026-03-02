@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.1.11 - 2026-03-03
+ Fixed
+- CSS styles now apply correctly on app startup (fixed theme loading in auto-login)
+- Replaced looked-up color variable with direct hex color in app.css
+ Changed
+- Replaced "Charge" column with "Sentence" in cases table
+- Removed verdict column, added tooltip to show full sentence on hover
+- Added status colors for all case statuses (OPEN, CLOSED, ADJOURNED, DISMISSED, SETTLED)
+- Increased update check timeout to 30 seconds and added User-Agent header
+- Applied async loading for all views to fix tab switch lag:
+  - Dashboard: stats and recent cases now load in background
+  - Cases: async loading with pagination (5 records per page)
+  - Offenders: async loading with pagination (5 records per page)
+
 ## v0.1.10 - 2026-02-27
 
 ### Changed
