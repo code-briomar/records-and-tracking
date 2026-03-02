@@ -244,7 +244,7 @@ public class App extends Application {
                 Map<String, Object> userData = new java.util.HashMap<>();
                 userData.put("userId", rs.getString("user_id"));
                 userData.put("email", rs.getString("email"));
-                userData.put("firstName", rs.getString("first_name"));
+                userData.put("fullName", rs.getString("full_name"));
                 userData.put("role", rs.getString("role"));
                 userData.put("status", rs.getString("status"));
                 userData.put("passwordHash", rs.getString("password_hash"));
