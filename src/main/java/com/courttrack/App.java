@@ -217,6 +217,32 @@ public class App extends Application {
         }
     }
 
+    private Map<String, Object> findLocalUser(String courtId, String email){
+        String sql = "SELECT * FROM app_user WHERE court_id = ? AND LOWER(email) = LOWER(?)";
+        try(Connection conn = DatabaseManager.getInstance().getConnection(); PreparedStatement ps = conn.prepareStatement(sql)){
+            ps.setString(1, courtId);
+            ps.setString(2, email);
+
+            var rs = ps.executeQuery();
+
+            if(rs.next()){
+                Map<String, Object> userData = new java.util.HashMap<>();
+                userData.put("userId",rs.getString("user_id"));
+                userData.put("email",rs.getString("email"));
+                userData.put("firstName",rs.getString("first_name"));
+                userData.put("role",rs.getString("role"));
+                userData.put("status",rs.getString("status"));
+                userData.put("passwordHash",rs.getString("password_hash"));
+                userData.put("salt", rs.getString("salt"));
+                userData.put("courtName",rs.getString("court_id")); //store courtId temporarily
+                return userData;
+            }
+        } catch (Exception e){
+            System.err.println("Error finding local user: "+e.getMessage());
+        }
+        return null;
+    }
+
     private void upsertLocalUser(String userId, String email, String fullName, String courtId, String courtName, String role) {
         try (Connection conn = DatabaseManager.getInstance().getConnection()) {
             // Ensure court exists locally first (satisfies the FK constraint on app_user)
