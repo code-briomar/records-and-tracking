@@ -200,6 +200,9 @@ public class App extends Application {
             return false;
         }
 
+        // Apply theme before showing UI
+        ThemeManager.getInstance().applyTheme();
+
         Map<String, Object> userData = findLocalUser(courtId, email);
         if (userData == null) {
             return false;
