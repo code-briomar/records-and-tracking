@@ -4,6 +4,7 @@ import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.sync.SyncStatus;
 import com.courttrack.update.UpdateInfo;
+
 import javafx.animation.Animation;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -20,13 +21,17 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
 import javafx.util.Duration;
+
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import com.courttrack.util.VersionPreferences;
+
 public class MainView {
+
     private final BorderPane root;
     private final StackPane contentArea;
     private final String username;
@@ -73,11 +78,14 @@ public class MainView {
     }
 
     /**
-     * Called from App.java when an update is detected.
-     * Shows a notification bar above the content area.
+     * Called from App.java when an update is detected. Shows a notification bar
+     * above the content area.
      */
     public void showUpdateNotification(UpdateInfo updateInfo) {
-        if (updateBar != null) return; // already showing
+        if (updateBar != null) {
+            return; // already showing
+
+        }
         updateBar = new UpdateNotificationBar(updateInfo, () -> {
             centerWrapper.getChildren().remove(updateBar);
             updateBar = null;
@@ -119,7 +127,9 @@ public class MainView {
         HBox logoRow = new HBox(10);
         logoRow.setAlignment(Pos.CENTER_LEFT);
         logoRow.setPadding(sidebarCollapsed ? new Insets(12, 0, 16, 0) : new Insets(12, 20, 16, 20));
-        if (sidebarCollapsed) logoRow.setAlignment(Pos.CENTER);
+        if (sidebarCollapsed) {
+            logoRow.setAlignment(Pos.CENTER);
+        }
 
         StackPane logoIcon = new StackPane();
         logoIcon.setMinSize(36, 36);
@@ -154,9 +164,9 @@ public class MainView {
         navButtons.clear();
         navLabels.clear();
         navSection.getChildren().addAll(
-            createNavButton("Dashboard", "dashboard", Feather.HOME),
-            createNavButton("Cases", "cases", Feather.FOLDER),
-            createNavButton("Offenders", "offenders", Feather.USERS)
+                createNavButton("Dashboard", "dashboard", Feather.HOME),
+                createNavButton("Cases", "cases", Feather.FOLDER),
+                createNavButton("Offenders", "offenders", Feather.USERS)
         );
 
         Region spacer = new Region();
@@ -182,7 +192,9 @@ public class MainView {
 
         HBox settingsContent = new HBox(10, settingsIcon);
         settingsContent.setAlignment(sidebarCollapsed ? Pos.CENTER : Pos.CENTER_LEFT);
-        if (!sidebarCollapsed) settingsContent.getChildren().add(settingsLabel);
+        if (!sidebarCollapsed) {
+            settingsContent.getChildren().add(settingsLabel);
+        }
         settingsBtn.setGraphic(settingsContent);
         settingsBtn.setText(null);
         settingsBtn.setStyle(navInactiveStyle());
@@ -224,7 +236,9 @@ public class MainView {
         userInfo.getChildren().addAll(userName, userRole);
 
         userRow.getChildren().add(userAvatar);
-        if (!sidebarCollapsed) userRow.getChildren().add(userInfo);
+        if (!sidebarCollapsed) {
+            userRow.getChildren().add(userInfo);
+        }
 
         logoutBtn = new Button("Sign Out");
         logoutBtn.setMaxWidth(Double.MAX_VALUE);
@@ -238,14 +252,22 @@ public class MainView {
             -fx-font-size: 12px;
             -fx-cursor: hand;
         """, tm.logoutText(), tm.sidebarSep()));
-        logoutBtn.setOnAction(e -> onLogout.run());
+        logoutBtn.setOnAction(e -> {
+            VersionPreferences.getInstance().clearSession();
+            onLogout.run();
+        });
 
         userCard.getChildren().add(userRow);
-        if (!sidebarCollapsed) userCard.getChildren().add(logoutBtn);
+        if (!sidebarCollapsed) {
+            userCard.getChildren().add(logoutBtn);
+        }
 
         if (sidebarCollapsed) {
             Tooltip.install(userAvatar, new Tooltip(username + "\nClick avatar to sign out"));
-            userAvatar.setOnMouseClicked(e -> onLogout.run());
+            userAvatar.setOnMouseClicked(e -> {
+                VersionPreferences.getInstance().clearSession();
+                onLogout.run();
+            });
         }
 
         // Sync status indicator
@@ -362,10 +384,14 @@ public class MainView {
         root.setLeft(sidebar);
         // Restore active button state
         int idx = switch (currentPage) {
-            case "dashboard" -> 0;
-            case "cases" -> 1;
-            case "offenders" -> 2;
-            default -> 0;
+            case "dashboard" ->
+                0;
+            case "cases" ->
+                1;
+            case "offenders" ->
+                2;
+            default ->
+                0;
         };
         if (idx < navButtons.size()) {
             activeButton = navButtons.get(idx);
@@ -475,7 +501,9 @@ public class MainView {
 
         HBox content = new HBox(10, fi);
         content.setAlignment(sidebarCollapsed ? Pos.CENTER : Pos.CENTER_LEFT);
-        if (!sidebarCollapsed) content.getChildren().add(label);
+        if (!sidebarCollapsed) {
+            content.getChildren().add(label);
+        }
 
         btn.setGraphic(content);
         btn.setText(null);
@@ -483,10 +511,14 @@ public class MainView {
         btn.setTooltip(new Tooltip(text));
 
         btn.setOnMouseEntered(e -> {
-            if (btn != activeButton) btn.setStyle(navHoverStyle());
+            if (btn != activeButton) {
+                btn.setStyle(navHoverStyle());
+            }
         });
         btn.setOnMouseExited(e -> {
-            if (btn != activeButton) btn.setStyle(navInactiveStyle());
+            if (btn != activeButton) {
+                btn.setStyle(navInactiveStyle());
+            }
         });
         if (page != null) {
             btn.setOnAction(e -> navigateTo(page));
@@ -532,18 +564,26 @@ public class MainView {
         for (Button btn : navButtons) {
             btn.setStyle(navInactiveStyle());
             btn.setOnMouseEntered(e -> {
-                if (btn != activeButton) btn.setStyle(navHoverStyle());
+                if (btn != activeButton) {
+                    btn.setStyle(navHoverStyle());
+                }
             });
             btn.setOnMouseExited(e -> {
-                if (btn != activeButton) btn.setStyle(navInactiveStyle());
+                if (btn != activeButton) {
+                    btn.setStyle(navInactiveStyle());
+                }
             });
         }
 
         int idx = switch (page) {
-            case "dashboard" -> 0;
-            case "cases" -> 1;
-            case "offenders" -> 2;
-            default -> 0;
+            case "dashboard" ->
+                0;
+            case "cases" ->
+                1;
+            case "offenders" ->
+                2;
+            default ->
+                0;
         };
         if (idx < navButtons.size()) {
             activeButton = navButtons.get(idx);
@@ -552,10 +592,14 @@ public class MainView {
 
         contentArea.getChildren().clear();
         Parent view = switch (page) {
-            case "dashboard" -> new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
-            case "cases" -> new CaseListView(this::showCaseDetail).getRoot();
-            case "offenders" -> new OffenderListView(this::showPersonDetail).getRoot();
-            default -> new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
+            case "dashboard" ->
+                new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
+            case "cases" ->
+                new CaseListView(this::showCaseDetail).getRoot();
+            case "offenders" ->
+                new OffenderListView(this::showPersonDetail).getRoot();
+            default ->
+                new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
         };
         contentArea.getChildren().add(view);
     }
