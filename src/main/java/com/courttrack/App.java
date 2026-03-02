@@ -107,6 +107,7 @@ public class App extends Application {
                         userData = docs.get(0).getValue();
                         // Save to local for future offline use
                         String userId = (String) userData.get("id");
+                        userData.put("userId",userId);
                         String fullName = (String) userData.getOrDefault("fullName", "");
                         String role = (String) userData.getOrDefault("role", "CLERK");
                         String courtIdLocal = (String) userData.get("courtId");
