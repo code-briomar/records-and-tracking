@@ -31,8 +31,9 @@ public class UpdateChecker {
             HttpURLConnection conn = (HttpURLConnection) new URL(apiUrl).openConnection();
             conn.setRequestMethod("GET");
             conn.setRequestProperty("Accept", "application/vnd.github.v3+json");
-            conn.setConnectTimeout(10_000);
-            conn.setReadTimeout(10_000);
+            conn.setRequestProperty("User-Agent", "CourtTrack-App");
+            conn.setConnectTimeout(30_000);
+            conn.setReadTimeout(30_000);
 
             int status = conn.getResponseCode();
             if (status != 200) {
