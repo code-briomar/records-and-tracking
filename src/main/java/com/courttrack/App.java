@@ -9,6 +9,7 @@ import com.courttrack.ui.LoginView;
 import com.courttrack.ui.MainView;
 import com.courttrack.ui.ReleaseNotesDialog;
 import com.courttrack.ui.ThemeManager;
+import com.courttrack.ui.Toast;
 import com.courttrack.update.UpdateChecker;
 import com.courttrack.update.UpdateInfo;
 import java.nio.file.Files;
@@ -36,6 +37,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 public class App extends Application {
+
     private Stage primaryStage;
     private LoginView loginView;
     private MainView mainView;
@@ -84,83 +86,81 @@ public class App extends Application {
         System.out.println("=== Login attempt: courtId=" + courtId + ", email=" + email);
 
         new Thread(() -> {
-            try {
-                // Query Firestore for user by email in the given court (lazily authenticates)
-                var docs = FirestoreContext.getUsersByEmail(courtId, email);
+            boolean isOnline = checkOnline();
 
-                if (docs.isEmpty()) {
-                    Platform.runLater(() -> loginView.showError("Invalid email or Court ID"));
+            Map<String, Object> userData = null;
+
+            try {
+                // 1. Try offline login first (localDB)
+                userData = findLocalUser(courtId, email);
+
+                // 2. If not found locally, try online
+                if (userData == null && isOnline) {
+                    var docs = FirestoreContext.getUsersByEmail(courtId, email);
+                    if (!docs.isEmpty()) {
+                        userData = docs.get(0).getValue();
+                        // Save to local for future offline use
+                        saveUserToLocal(userData);
+                    }
+                }
+
+                // 3. If still no user data, fail
+                if (userData == null) {
+                    Platform.runLater(() -> Toast.showError("Invalid email or COURT ID"));
                     return;
                 }
 
-                var userDoc = docs.get(0);
-                Map<String, Object> userData = userDoc.getValue();
-
+                //4. Verify password
                 String storedHash = (String) userData.get("passwordHash");
                 String storedSalt = (String) userData.get("salt");
 
                 if (storedHash == null || storedSalt == null) {
-                    Platform.runLater(() -> loginView.showError("User account not properly configured"));
+                    Platform.runLater(() -> Toast.showError("Account not set up. Contact Admin from the help screen"));
                     return;
                 }
 
                 if (!verifyPassword(password, storedHash, storedSalt)) {
-                    Platform.runLater(() -> loginView.showError("Invalid password"));
+                    Platform.runLater(() -> Toast.showError("Invalid password."));
                     return;
                 }
 
-                // Auth successful — extract user info
-                String userId = userDoc.getKey();
+                // 5. Extract and validate user info
+                String userId = (String) userData.get("userId");
                 String fullName = (String) userData.getOrDefault("fullName", "");
-                String role = (String) userData.getOrDefault("role", "CLERK");
+                String role = (String) userData.get("role");
                 String status = (String) userData.getOrDefault("status", "ACTIVE");
                 String courtName = (String) userData.getOrDefault("courtName", courtId);
-
-                if (!"ACTIVE".equalsIgnoreCase(status)) {
-                    Platform.runLater(() -> loginView.showError("Account is not active"));
+                
+                if(!"ACTIVE".equalsIgnoreCase(status)){
+                    Platform.runLater(()->Toast.showError("Account is not active"));
                     return;
                 }
 
-                System.out.println("=== Login successful: " + fullName + " (" + role + ") at " + courtId);
-
-                // Bind court context
+                // 6. Success - bind context and show main view
                 CourtContext.getInstance().bind(courtId, courtName, userId, email, role);
-                System.out.println("CourtContext bound: " + courtId + " - " + courtName);
+                SyncStatus.getInstance().set(SyncStatus.SYNCING, isOnline ? "Connected":"Offline");
 
-                // Upsert user into local database for offline reference
-                upsertLocalUser(userId, email, fullName, courtId, courtName, role);
-                SyncStatus.getInstance().set(SyncStatus.State.SYNCING, "Connected");
-
-                // Switch to main view on UI thread
-                Platform.runLater(() -> {
+                Platform.runLater(()->{
                     loginView.setLoading(false);
-                    primaryStage.setTitle("Records & Tracking System - " + courtName);
                     mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
                     Scene scene = new Scene(mainView.getRoot(), 1200, 800);
-                    addSupplementalCss(scene);
+                    addSuplementalClass(scene);
                     primaryStage.setScene(scene);
-
-                    // Check for version update and show release notes
-                    checkAndShowReleaseNotes();
-
-                    // Schedule update check
-                    scheduleUpdateCheck();
+                    if(isOnline){
+                        checkAndShowReleaseNotes();
+                        scheduleUpdateCheck();
+                    }
                 });
 
-                // Start sync in background
-                System.out.println("Starting sync in background...");
-                Thread.sleep(2000);
-                System.out.println("=== Calling syncAll() ===");
-                SyncCoordinator.getInstance().syncAll();
-                System.out.println("=== syncAll() completed ===");
+                // 7. Sync if online
+                if(isOnline){
+                    Thread.sleep(2000);
+                    SyncCordinator.getInstance().syncAll();
+                }
 
-                // Start periodic connectivity checker
                 startConnectivityChecker();
-
-            } catch (Exception e) {
-                System.err.println("Login error: " + e.getMessage());
-                e.printStackTrace();
-                Platform.runLater(() -> loginView.showError("Login failed: " + e.getMessage()));
+            } catch (Exception e){
+                Platform.runLater(()->Toast.showError("Login failed: "+e.getMessage));
             }
         }).start();
     }
@@ -217,28 +217,28 @@ public class App extends Application {
         }
     }
 
-    private Map<String, Object> findLocalUser(String courtId, String email){
+    private Map<String, Object> findLocalUser(String courtId, String email) {
         String sql = "SELECT * FROM app_user WHERE court_id = ? AND LOWER(email) = LOWER(?)";
-        try(Connection conn = DatabaseManager.getInstance().getConnection(); PreparedStatement ps = conn.prepareStatement(sql)){
+        try (Connection conn = DatabaseManager.getInstance().getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, courtId);
             ps.setString(2, email);
 
             var rs = ps.executeQuery();
 
-            if(rs.next()){
+            if (rs.next()) {
                 Map<String, Object> userData = new java.util.HashMap<>();
-                userData.put("userId",rs.getString("user_id"));
-                userData.put("email",rs.getString("email"));
-                userData.put("firstName",rs.getString("first_name"));
-                userData.put("role",rs.getString("role"));
-                userData.put("status",rs.getString("status"));
-                userData.put("passwordHash",rs.getString("password_hash"));
+                userData.put("userId", rs.getString("user_id"));
+                userData.put("email", rs.getString("email"));
+                userData.put("firstName", rs.getString("first_name"));
+                userData.put("role", rs.getString("role"));
+                userData.put("status", rs.getString("status"));
+                userData.put("passwordHash", rs.getString("password_hash"));
                 userData.put("salt", rs.getString("salt"));
-                userData.put("courtName",rs.getString("court_id")); //store courtId temporarily
+                userData.put("courtName", rs.getString("court_id")); //store courtId temporarily
                 return userData;
             }
-        } catch (Exception e){
-            System.err.println("Error finding local user: "+e.getMessage());
+        } catch (Exception e) {
+            System.err.println("Error finding local user: " + e.getMessage());
         }
         return null;
     }
@@ -253,8 +253,8 @@ public class App extends Application {
                 ps.executeUpdate();
             }
 
-            String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, last_login_date, updated_at) " +
-                        "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+            String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, last_login_date, updated_at) "
+                    + "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
             try (PreparedStatement ps = conn.prepareStatement(userSql)) {
                 ps.setString(1, userId);
                 ps.setString(2, email);
@@ -306,8 +306,8 @@ public class App extends Application {
 
             if (pendingVersion.equals(currentVersion)) {
                 System.out.println("Showing release notes for " + currentVersion);
-                Platform.runLater(() ->
-                        new ReleaseNotesDialog(currentVersion, notes).showAndWait());
+                Platform.runLater(()
+                        -> new ReleaseNotesDialog(currentVersion, notes).showAndWait());
             }
         } catch (Exception e) {
             System.err.println("Failed to read pending release notes: " + e.getMessage());
@@ -315,7 +315,9 @@ public class App extends Application {
     }
 
     private void scheduleUpdateCheck() {
-        if (updateChecker != null) updateChecker.shutdownNow();
+        if (updateChecker != null) {
+            updateChecker.shutdownNow();
+        }
         updateChecker = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "update-checker");
             t.setDaemon(true);
