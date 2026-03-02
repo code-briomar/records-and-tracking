@@ -106,7 +106,7 @@ public class App extends Application {
                     if (!docs.isEmpty()) {
                         userData = docs.get(0).getValue();
                         // Save to local for future offline use
-                        SObject userIdObj = userData.get("id");
+                        Object userIdObj = userData.get("id");
                         String userId = userIdObj != null ? userIdObj.toString() : null;
                         userData.put("userId", userId);
                         String fullName = (String) userData.getOrDefault("fullName", "");
