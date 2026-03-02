@@ -59,23 +59,22 @@ public class App extends Application {
             System.err.println("Could not load app icon: " + e.getMessage());
         }
 
+        // Initialize database
+        DatabaseManager.getInstance().initialize();
+
         prefs = VersionPreferences.getInstance();
-// Try auto-login with saved session
+        // Try auto-login with saved session
         if (prefs.hasSession()) {
             if (tryAutoLogin()) {
+                primaryStage.show();
                 return; // Already showed main view
             }
         }
-
-        // Initialize database
-        DatabaseManager.getInstance().initialize();
 
         // Apply AtlantaFX theme before showing any UI
         ThemeManager.getInstance().applyTheme();
 
         showLogin();
-
-        CourtContext.getInstance().unbind();
 
         stage.setTitle("Records & Tracking System");
         stage.setMinWidth(1000);
@@ -87,6 +86,7 @@ public class App extends Application {
     }
 
     private void showLogin() {
+        CourtContext.getInstance().unbind();
         stopConnectivityChecker();
         SyncStatus.getInstance().set(SyncStatus.State.OFFLINE, "Offline");
         loginView = new LoginView(this::onLoginAttempt);
@@ -219,16 +219,14 @@ public class App extends Application {
         boolean isOnline = checkOnline();
         SyncStatus.getInstance().set(SyncStatus.State.SYNCING, isOnline ? "Connected" : "Offline");
 
-        Platform.runLater(() -> {
-            mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
-            Scene scene = new Scene(mainView.getRoot(), 1200, 800);
-            addSupplementalCss(scene);
-            primaryStage.setScene(scene);
-            if (isOnline) {
-                checkAndShowReleaseNotes();
-                scheduleUpdateCheck();
-            }
-        });
+        mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
+        Scene scene = new Scene(mainView.getRoot(), 1200, 800);
+        addSupplementalCss(scene);
+        primaryStage.setScene(scene);
+        if (isOnline) {
+            checkAndShowReleaseNotes();
+            scheduleUpdateCheck();
+        }
 
         startConnectivityChecker();
         return true;
