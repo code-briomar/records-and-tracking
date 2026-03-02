@@ -243,31 +243,31 @@ public class App extends Application {
         return null;
     }
 
-    private void upsertLocalUser(String userId, String email, String fullName, String courtId, String courtName, String role) {
-        try (Connection conn = DatabaseManager.getInstance().getConnection()) {
-            // Ensure court exists locally first (satisfies the FK constraint on app_user)
-            String courtSql = "MERGE INTO court (court_id, name, is_active) KEY(court_id) VALUES (?, ?, TRUE)";
-            try (PreparedStatement ps = conn.prepareStatement(courtSql)) {
-                ps.setString(1, courtId);
-                ps.setString(2, courtName);
-                ps.executeUpdate();
-            }
-
-            String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, last_login_date, updated_at) "
-                    + "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
-            try (PreparedStatement ps = conn.prepareStatement(userSql)) {
-                ps.setString(1, userId);
-                ps.setString(2, email);
-                ps.setString(3, fullName);
-                ps.setString(4, courtId);
-                ps.setString(5, role);
-                ps.executeUpdate();
-            }
-        } catch (Exception e) {
-            System.err.println("Failed to upsert local user: " + e.getMessage());
+    private void upsertLocalUser(String userId, String email, String fullName, String courtId, String courtName, String role, String passwordHash, String salt) {
+    try (Connection conn = DatabaseManager.getInstance().getConnection()) {
+        // Ensure court exists locally first (satisfies the FK constraint on app_user)
+        String courtSql = "MERGE INTO court (court_id, name, is_active) KEY(court_id) VALUES (?, ?, TRUE)";
+        try (PreparedStatement ps = conn.prepareStatement(courtSql)) {
+            ps.setString(1, courtId);
+            ps.setString(2, courtName);
+            ps.executeUpdate();
         }
+        String userSql = "MERGE INTO app_user (user_id, email, full_name, court_id, role, status, password_hash, salt, last_login_date, updated_at) "
+                + "KEY(user_id) VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)";
+        try (PreparedStatement ps = conn.prepareStatement(userSql)) {
+            ps.setString(1, userId);
+            ps.setString(2, email);
+            ps.setString(3, fullName);
+            ps.setString(4, courtId);
+            ps.setString(5, role);
+            ps.setString(6, passwordHash);
+            ps.setString(7, salt);
+            ps.executeUpdate();
+        }
+    } catch (Exception e) {
+        System.err.println("Failed to upsert local user: " + e.getMessage());
     }
-
+}
     private void addSupplementalCss(Scene scene) {
         ThemeManager tm = ThemeManager.getInstance();
         String css = getClass().getResource(tm.getSupplementalCssPath()).toExternalForm();
