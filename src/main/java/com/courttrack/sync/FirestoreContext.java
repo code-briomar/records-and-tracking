@@ -21,7 +21,7 @@ public class FirestoreContext {
 
     public static boolean isAvailable() {
         boolean available = isInitialized() && currentCourtId.get() != null;
-        LOGGER.info("FirestoreContext.isAvailable() = " + available
+        LOGGER.info(() -> "FirestoreContext.isAvailable() = " + available
                 + " (authenticated=" + isInitialized() + ", courtId=" + currentCourtId.get() + ")");
         return available;
     }
