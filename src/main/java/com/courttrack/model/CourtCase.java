@@ -42,6 +42,7 @@ public class CourtCase {
     private String chargeParticulars;
     private String chargeVerdict;
     private String chargePlea;
+    private String sentenceNotes;
 
     public CourtCase() {
         this.caseId = UUID.randomUUID().toString();
@@ -157,4 +158,7 @@ public class CourtCase {
 
     public String getChargePlea() { return chargePlea; }
     public void setChargePlea(String chargePlea) { this.chargePlea = chargePlea; }
+
+    public String getSentenceNotes() { return sentenceNotes; }
+    public void setSentenceNotes(String sentenceNotes) { this.sentenceNotes = sentenceNotes; }
 }

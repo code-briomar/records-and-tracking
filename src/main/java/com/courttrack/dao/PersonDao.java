@@ -26,6 +26,23 @@ public class PersonDao {
         return list;
     }
 
+    public List<Person> findAllPaginated(int offset, int limit) {
+        List<Person> list = new ArrayList<>();
+        String sql = "SELECT * FROM person WHERE is_deleted = 0 ORDER BY last_name, first_name LIMIT ? OFFSET ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            ps.setInt(2, offset);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(mapRow(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
     public Person findById(String personId) {
         String sql = "SELECT * FROM person WHERE person_id = ? AND is_deleted = 0";
         try (Connection conn = db.getConnection();

@@ -559,7 +559,9 @@ public class MainView {
     }
 
     private void navigateTo(String page) {
+        long startTime = System.currentTimeMillis();
         currentPage = page;
+        System.out.println("[DEBUG] navigateTo: " + page + " starting...");
 
         for (Button btn : navButtons) {
             btn.setStyle(navInactiveStyle());
@@ -591,17 +593,37 @@ public class MainView {
         }
 
         contentArea.getChildren().clear();
+        long beforeViewCreate = System.currentTimeMillis();
+        System.out.println("[DEBUG] navigateTo: " + page + " - UI setup took: " + (beforeViewCreate - startTime) + "ms");
+        
         Parent view = switch (page) {
-            case "dashboard" ->
-                new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
-            case "cases" ->
-                new CaseListView(this::showCaseDetail).getRoot();
-            case "offenders" ->
-                new OffenderListView(this::showPersonDetail).getRoot();
-            default ->
-                new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
+            case "dashboard" -> {
+                long t0 = System.currentTimeMillis();
+                var v = new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
+                System.out.println("[DEBUG] DashboardView created in: " + (System.currentTimeMillis() - t0) + "ms");
+                yield v;
+            }
+            case "cases" -> {
+                long t0 = System.currentTimeMillis();
+                var v = new CaseListView(this::showCaseDetail).getRoot();
+                System.out.println("[DEBUG] CaseListView created in: " + (System.currentTimeMillis() - t0) + "ms");
+                yield v;
+            }
+            case "offenders" -> {
+                long t0 = System.currentTimeMillis();
+                var v = new OffenderListView(this::showPersonDetail).getRoot();
+                System.out.println("[DEBUG] OffenderListView created in: " + (System.currentTimeMillis() - t0) + "ms");
+                yield v;
+            }
+            default -> {
+                long t0 = System.currentTimeMillis();
+                var v = new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
+                System.out.println("[DEBUG] DashboardView (default) created in: " + (System.currentTimeMillis() - t0) + "ms");
+                yield v;
+            }
         };
         contentArea.getChildren().add(view);
+        System.out.println("[DEBUG] navigateTo: " + page + " TOTAL time: " + (System.currentTimeMillis() - startTime) + "ms");
     }
 
     public void showCaseDetail(CourtCase courtCase) {

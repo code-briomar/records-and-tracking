@@ -4,6 +4,7 @@ import com.courttrack.dao.CaseDao;
 import com.courttrack.dao.PersonDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.Person;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -21,6 +22,7 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -33,12 +35,57 @@ public class OffenderListView {
     private TableView<Person> table;
     private ObservableList<Person> personList;
     private TextField searchField;
+    private Button prevBtn, nextBtn;
+    private Label pageLabel;
+    private int currentPage = 0;
+    private int pageSize = 5;
+    private int totalCount = 0;
 
     public OffenderListView(Consumer<Person> onViewDetail) {
         this.onViewDetail = onViewDetail;
         root = new VBox(20);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
+        loadPage();
+    }
+
+    private void loadPage() {
+        String query = searchField.getText();
+        
+        new Thread(() -> {
+            long t0 = System.currentTimeMillis();
+            List<Person> persons;
+            int count;
+            if (query != null && !query.isEmpty()) {
+                persons = personDao.search(query);
+                count = persons.size();
+                final int fCount = count;
+                final List<Person> fPersons = persons.stream().skip(currentPage * pageSize).limit(pageSize).toList();
+                System.out.println("[DEBUG] OffenderListView: loadPage DB: " + (System.currentTimeMillis() - t0) + "ms");
+                Platform.runLater(() -> {
+                    personList.setAll(fPersons);
+                    totalCount = fCount;
+                    updatePaginationControls();
+                });
+            } else {
+                persons = personDao.findAllPaginated(currentPage * pageSize, pageSize);
+                count = personDao.countAll();
+                System.out.println("[DEBUG] OffenderListView: loadPage DB: " + (System.currentTimeMillis() - t0) + "ms");
+                final List<Person> fPersons = persons;
+                Platform.runLater(() -> {
+                    personList.setAll(fPersons);
+                    totalCount = count;
+                    updatePaginationControls();
+                });
+            }
+        }).start();
+    }
+
+    private void updatePaginationControls() {
+        int totalPages = (int) Math.ceil((double) totalCount / pageSize);
+        pageLabel.setText((currentPage + 1) + " / " + Math.max(1, totalPages));
+        prevBtn.setDisable(currentPage == 0);
+        nextBtn.setDisable(currentPage >= totalPages - 1 || totalCount == 0);
     }
 
     private void buildUI() {
@@ -57,7 +104,17 @@ public class OffenderListView {
         searchField = new TextField();
         searchField.setPromptText("Filter...");
         searchField.setPrefWidth(240);
-        searchField.textProperty().addListener((obs, o, n) -> refreshTable());
+        searchField.textProperty().addListener((obs, o, n) -> { currentPage = 0; loadPage(); });
+
+        prevBtn = new Button("Prev");
+        prevBtn.setOnAction(e -> { if (currentPage > 0) { currentPage--; loadPage(); } });
+        
+        pageLabel = new Label("1 / 1");
+        pageLabel.setMinWidth(60);
+        pageLabel.setAlignment(Pos.CENTER);
+        
+        nextBtn = new Button("Next");
+        nextBtn.setOnAction(e -> { currentPage++; loadPage(); });
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -66,11 +123,12 @@ public class OffenderListView {
         addBtn.getStyleClass().add("accent");
         addBtn.setOnAction(e -> handleAdd());
 
-        toolbar.getChildren().addAll(searchField, spacer, addBtn);
+        toolbar.getChildren().addAll(searchField, prevBtn, pageLabel, nextBtn, spacer, addBtn);
 
         table = createTable();
-        personList = FXCollections.observableArrayList(personDao.findAll());
+        personList = FXCollections.observableArrayList();
         table.setItems(personList);
+        table.setPlaceholder(new Label("Loading..."));
         VBox.setVgrow(table, Priority.ALWAYS);
 
         root.getChildren().addAll(titleBox, toolbar, table);
@@ -123,9 +181,8 @@ public class OffenderListView {
     }
 
     private void refreshTable() {
-        String query = searchField.getText().trim();
-        if (query.isEmpty()) { personList.setAll(personDao.findAll()); }
-        else { personList.setAll(personDao.search(query)); }
+        currentPage = 0;
+        loadPage();
     }
 
     private void handleAdd() {

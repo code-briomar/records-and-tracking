@@ -14,18 +14,74 @@ public class CaseDao {
     private final DatabaseManager db = DatabaseManager.getInstance();
 
     private static final String SELECT_WITH_CHARGE = """
-        SELECT cc.*, ch.particulars AS charge_particulars, ch.verdict AS charge_verdict, ch.plea AS charge_plea
+        SELECT cc.*, ch.particulars AS charge_particulars, ch.verdict AS charge_verdict, ch.plea AS charge_plea, ch.sentence_notes AS sentence_notes
         FROM court_case cc
         LEFT JOIN charge ch ON ch.case_id = cc.case_id
             AND ch.charge_id = (SELECT MIN(c2.charge_id) FROM charge c2 WHERE c2.case_id = cc.case_id)
     """;
 
     public List<CourtCase> findAll() {
+        return findAllPaginated(0, Integer.MAX_VALUE);
+    }
+
+    public List<CourtCase> findAllPaginated(int offset, int limit) {
         List<CourtCase> list = new ArrayList<>();
-        String sql = SELECT_WITH_CHARGE + " WHERE cc.is_deleted = 0 ORDER BY cc.filing_date DESC";
+        String sql = SELECT_WITH_CHARGE + " WHERE cc.is_deleted = 0 ORDER BY cc.filing_date DESC LIMIT ? OFFSET ?";
         try (Connection conn = db.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, limit);
+            ps.setInt(2, offset);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                list.add(mapRowWithCharge(rs));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return list;
+    }
+
+    public int countAll() {
+        return countWithCondition("");
+    }
+
+    public int countByStatusAndCategory(String status, String category) {
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM court_case WHERE is_deleted = 0");
+        if (status != null && !status.equals("All")) sql.append(" AND case_status = ?");
+        if (category != null && !category.equals("All")) sql.append(" AND case_category = ?");
+
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            int idx = 1;
+            if (status != null && !status.equals("All")) ps.setString(idx++, status);
+            if (category != null && !category.equals("All")) ps.setString(idx++, category);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public List<CourtCase> findByStatusAndCategory(String status, String category) {
+        return findByStatusAndCategoryPaginated(status, category, 0, Integer.MAX_VALUE);
+    }
+
+    public List<CourtCase> findByStatusAndCategoryPaginated(String status, String category, int offset, int limit) {
+        List<CourtCase> list = new ArrayList<>();
+        StringBuilder sql = new StringBuilder(SELECT_WITH_CHARGE + " WHERE cc.is_deleted = 0");
+        if (status != null && !status.equals("All")) sql.append(" AND cc.case_status = ?");
+        if (category != null && !category.equals("All")) sql.append(" AND cc.case_category = ?");
+        sql.append(" ORDER BY cc.filing_date DESC LIMIT ? OFFSET ?");
+
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            int idx = 1;
+            if (status != null && !status.equals("All")) ps.setString(idx++, status);
+            if (category != null && !category.equals("All")) ps.setString(idx++, category);
+            ps.setInt(idx++, limit);
+            ps.setInt(idx++, offset);
+            ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 list.add(mapRowWithCharge(rs));
             }
@@ -59,35 +115,6 @@ public class CaseDao {
              PreparedStatement ps = conn.prepareStatement(sql)) {
             String pattern = "%" + query + "%";
             for (int i = 1; i <= 5; i++) ps.setString(i, pattern);
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                list.add(mapRowWithCharge(rs));
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-        return list;
-    }
-
-    public List<CourtCase> findByStatusAndCategory(String status, String category) {
-        StringBuilder sql = new StringBuilder(SELECT_WITH_CHARGE + " WHERE cc.is_deleted = 0");
-        List<String> params = new ArrayList<>();
-        if (status != null && !status.equals("All")) {
-            sql.append(" AND cc.case_status = ?");
-            params.add(status);
-        }
-        if (category != null && !category.equals("All")) {
-            sql.append(" AND cc.case_category = ?");
-            params.add(category);
-        }
-        sql.append(" ORDER BY cc.filing_date DESC");
-
-        List<CourtCase> list = new ArrayList<>();
-        try (Connection conn = db.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
-            for (int i = 0; i < params.size(); i++) {
-                ps.setString(i + 1, params.get(i));
-            }
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
                 list.add(mapRowWithCharge(rs));
@@ -197,10 +224,6 @@ public class CaseDao {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-    }
-
-    public int countAll() {
-        return countWithCondition("");
     }
 
     public int countByStatus(String status) {
@@ -365,6 +388,7 @@ public class CaseDao {
         c.setChargeParticulars(rs.getString("charge_particulars"));
         c.setChargeVerdict(rs.getString("charge_verdict"));
         c.setChargePlea(rs.getString("charge_plea"));
+        c.setSentenceNotes(rs.getString("sentence_notes"));
         return c;
     }
 }

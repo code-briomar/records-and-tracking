@@ -2,6 +2,7 @@ package com.courttrack.ui;
 
 import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CourtCase;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -17,9 +18,9 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
-
 import com.courttrack.sync.SyncCoordinator;
 import javafx.stage.Modality;
 
@@ -33,14 +34,65 @@ public class CaseListView {
     private TextField searchField;
     private ComboBox<String> statusFilter;
     private ComboBox<String> categoryFilter;
+    private Button prevBtn, nextBtn;
+    private Label pageLabel;
+    private int currentPage = 0;
+    private int pageSize = 5;
+    private int totalCount = 0;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     public CaseListView(Consumer<CourtCase> onViewDetail) {
+        long t0 = System.currentTimeMillis();
         this.onViewDetail = onViewDetail;
         root = new VBox(20);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
+        loadPage();
+        System.out.println("[DEBUG] CaseListView constructor TOTAL: " + (System.currentTimeMillis() - t0) + "ms");
+    }
+
+    private void loadPage() {
+        String status = statusFilter.getValue();
+        String category = categoryFilter.getValue();
+        String query = searchField.getText();
+        
+        int offset = currentPage * pageSize;
+        
+        new Thread(() -> {
+            long t0 = System.currentTimeMillis();
+            List<CourtCase> cases;
+            int count;
+            if (query != null && !query.isEmpty()) {
+                cases = caseDao.search(query);
+                count = cases.size();
+                final int fCount = count;
+                final List<CourtCase> fCases = cases.stream().skip(offset).limit(pageSize).toList();
+                System.out.println("[DEBUG] CaseListView: loadPage DB query: " + (System.currentTimeMillis() - t0) + "ms");
+                Platform.runLater(() -> {
+                    caseList.setAll(fCases);
+                    totalCount = fCount;
+                    updatePaginationControls();
+                });
+            } else {
+                cases = caseDao.findByStatusAndCategoryPaginated(status, category, offset, pageSize);
+                count = caseDao.countByStatusAndCategory(status, category);
+                System.out.println("[DEBUG] CaseListView: loadPage DB query: " + (System.currentTimeMillis() - t0) + "ms");
+                final List<CourtCase> finalCases = cases;
+                Platform.runLater(() -> {
+                    caseList.setAll(finalCases);
+                    totalCount = count;
+                    updatePaginationControls();
+                });
+            }
+        }).start();
+    }
+
+    private void updatePaginationControls() {
+        int totalPages = (int) Math.ceil((double) totalCount / pageSize);
+        pageLabel.setText((currentPage + 1) + " / " + Math.max(1, totalPages));
+        prevBtn.setDisable(currentPage == 0);
+        nextBtn.setDisable(currentPage >= totalPages - 1 || totalCount == 0);
     }
 
     private void buildUI() {
@@ -54,31 +106,42 @@ public class CaseListView {
         VBox titleBox = new VBox(4, pageTitle, pageSubtitle);
 
         searchField = new TextField();
-        searchField.setPromptText("Search by case number, title, or charge...");
+        searchField.setPromptText("Search by case number, title, or sentence...");
         searchField.setPrefWidth(300);
-        searchField.textProperty().addListener((obs, o, n) -> refreshTable());
+        searchField.textProperty().addListener((obs, o, n) -> { currentPage = 0; loadPage(); });
 
-        statusFilter = new ComboBox<>(FXCollections.observableArrayList("All", "OPEN", "CLOSED"));
+        statusFilter = new ComboBox<>(FXCollections.observableArrayList("All", "OPEN", "CLOSED", "ADJOURNED", "DISMISSED", "SETTLED"));
         statusFilter.setValue("All");
-        statusFilter.setOnAction(e -> refreshTable());
+        statusFilter.setOnAction(e -> { currentPage = 0; loadPage(); });
 
         categoryFilter = new ComboBox<>(FXCollections.observableArrayList("All", "Criminal", "Traffic", "Civil"));
         categoryFilter.setValue("All");
-        categoryFilter.setOnAction(e -> refreshTable());
+        categoryFilter.setOnAction(e -> { currentPage = 0; loadPage(); });
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        prevBtn = new Button("Prev");
+        prevBtn.setOnAction(e -> { if (currentPage > 0) { currentPage--; loadPage(); } });
+        
+        pageLabel = new Label("1 / 1");
+        pageLabel.setMinWidth(60);
+        pageLabel.setAlignment(Pos.CENTER);
+        
+        nextBtn = new Button("Next");
+        nextBtn.setOnAction(e -> { currentPage++; loadPage(); });
 
         Button addBtn = new Button("+ New Case");
         addBtn.getStyleClass().add("accent");
         addBtn.setOnAction(e -> handleAdd());
 
-        HBox toolbar = new HBox(10, searchField, statusFilter, categoryFilter, spacer, addBtn);
+        HBox toolbar = new HBox(10, searchField, statusFilter, categoryFilter, spacer, prevBtn, pageLabel, nextBtn, addBtn);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         table = createTable();
-        caseList = FXCollections.observableArrayList(caseDao.findAll());
+        caseList = FXCollections.observableArrayList();
         table.setItems(caseList);
+        table.setPlaceholder(new Label("Loading..."));
         VBox.setVgrow(table, Priority.ALWAYS);
 
         root.getChildren().addAll(titleBox, toolbar, table);
@@ -141,47 +204,23 @@ public class CaseListView {
             }
         });
 
-        // Charge particulars
-        TableColumn<CourtCase, String> chargeCol = new TableColumn<>("Charge");
-        chargeCol.setPrefWidth(220);
-        chargeCol.setMinWidth(150);
-        chargeCol.setCellValueFactory(cd -> new SimpleStringProperty(
-            cd.getValue().getChargeParticulars() != null ? cd.getValue().getChargeParticulars() : "\u2014"
+        // Sentence with tooltip
+        TableColumn<CourtCase, String> sentenceCol = new TableColumn<>("Sentence");
+        sentenceCol.setPrefWidth(220);
+        sentenceCol.setMinWidth(150);
+        sentenceCol.setCellValueFactory(cd -> new SimpleStringProperty(
+            cd.getValue().getSentence() != null ? cd.getValue().getSentence() : "\u2014"
         ));
-
-        // Verdict
-        TableColumn<CourtCase, String> verdictCol = new TableColumn<>("Verdict");
-        verdictCol.setPrefWidth(120);
-        verdictCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getChargeVerdict()));
-        verdictCol.setCellFactory(col -> new TableCell<>() {
+        sentenceCol.setCellFactory(col -> new TableCell<>() {
             @Override
-            protected void updateItem(String verdict, boolean empty) {
-                super.updateItem(verdict, empty);
-                if (empty) {
-                    setGraphic(null);
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null || item.equals("\u2014")) {
                     setText(null);
-                } else if (verdict == null || verdict.isBlank()) {
-                    setText("Pending");
-                    setStyle("-fx-text-fill: #91918e; -fx-font-style: italic;");
-                    setGraphic(null);
+                    setTooltip(null);
                 } else {
-                    String display = verdict.replace("_", " ");
-                    display = display.substring(0, 1).toUpperCase() + display.substring(1).toLowerCase();
-                    Label badge = new Label(display);
-                    badge.setPadding(new Insets(3, 10, 3, 10));
-                    badge.setFont(Font.font("System", 11));
-                    boolean isConvicted = verdict.contains("CONVICTED") || verdict.contains("GUILTY");
-                    boolean isForPlaintiff = verdict.contains("PLAINTIFF");
-                    if (isConvicted) {
-                        badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeCriminalBg(), tm.badgeCriminalText()));
-                    } else if (isForPlaintiff) {
-                        badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeOpenBg(), tm.badgeOpenText()));
-                    } else {
-                        badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeCivilBg(), tm.badgeCivilText()));
-                    }
-                    setGraphic(badge);
-                    setText(null);
-                    setStyle("");
+                    setText(item);
+                    setTooltip(new Tooltip(item));
                 }
             }
         });
@@ -198,10 +237,24 @@ public class CaseListView {
                     Label badge = new Label(status);
                     badge.setPadding(new Insets(3, 10, 3, 10));
                     badge.setFont(Font.font("System", 11));
-                    if ("OPEN".equals(status)) {
-                        badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeOpenBg(), tm.badgeOpenText()));
-                    } else {
-                        badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeClosedBg(), tm.badgeClosedText()));
+                    switch (status) {
+                        case "OPEN":
+                            badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeOpenBg(), tm.badgeOpenText()));
+                            break;
+                        case "CLOSED":
+                            badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeClosedBg(), tm.badgeClosedText()));
+                            break;
+                        case "ADJOURNED":
+                            badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeTrafficBg(), tm.badgeTrafficText()));
+                            break;
+                        case "DISMISSED":
+                            badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.accentRed() + "33", tm.accentRed()));
+                            break;
+                        case "SETTLED":
+                            badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeCivilBg(), tm.badgeCivilText()));
+                            break;
+                        default:
+                            badge.setStyle("-fx-background-color: #66666633; -fx-text-fill: #666666; -fx-background-radius: 4;");
                     }
                     setGraphic(badge);
                 }
@@ -237,7 +290,7 @@ public class CaseListView {
             }
         });
 
-        tv.getColumns().addAll(caseCol, catCol, chargeCol, verdictCol, statusCol, dateCol, actionsCol);
+        tv.getColumns().addAll(caseCol, catCol, sentenceCol, statusCol, dateCol, actionsCol);
         tv.setPlaceholder(new Label("No cases found"));
         return tv;
     }

@@ -5,6 +5,7 @@ import com.courttrack.dao.PersonDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
@@ -32,6 +33,10 @@ public class DashboardView {
     private final Runnable onNavigatePersons;
     private final Consumer<CourtCase> onViewCase;
 
+    private HBox statsRow;
+    private TableView<CourtCase> recentTable;
+    private VBox recentSection;
+
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     public DashboardView(Runnable onNavigateCases, Runnable onNavigatePersons, Consumer<CourtCase> onViewCase) {
@@ -41,9 +46,43 @@ public class DashboardView {
         root = new VBox(24);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
+        loadDataAsync();
+    }
+
+    private void loadDataAsync() {
+        // Load stats in background
+        new Thread(() -> {
+            long t0 = System.currentTimeMillis();
+            int totalCases = caseDao.countAll();
+            int openCases = caseDao.countByStatus("OPEN");
+            int closedCases = caseDao.countByStatus("CLOSED");
+            int totalOffenders = personDao.countAll();
+            System.out.println("[DEBUG] Dashboard: DB stats queries (async): " + (System.currentTimeMillis() - t0) + "ms");
+
+            Platform.runLater(() -> {
+                statsRow.getChildren().setAll(
+                    createStatCard("Total Cases", String.valueOf(totalCases), tm.accentBlue()),
+                    createStatCard("Open Cases", String.valueOf(openCases), tm.accentGreen()),
+                    createStatCard("Closed Cases", String.valueOf(closedCases), tm.accentOrange()),
+                    createStatCard("Persons on Record", String.valueOf(totalOffenders), tm.accentPurple())
+                );
+            });
+        }).start();
+
+        // Load recent cases in background
+        new Thread(() -> {
+            long t0 = System.currentTimeMillis();
+            var cases = caseDao.findRecent(10);
+            System.out.println("[DEBUG] Dashboard: Recent cases query (async): " + (System.currentTimeMillis() - t0) + "ms");
+
+            Platform.runLater(() -> {
+                recentTable.getItems().setAll(cases);
+            });
+        }).start();
     }
 
     private void buildUI() {
+        long t0 = System.currentTimeMillis();
         Label pageTitle = new Label("Dashboard");
         pageTitle.setFont(Font.font("System", FontWeight.BOLD, 28));
 
@@ -53,17 +92,12 @@ public class DashboardView {
 
         VBox titleBox = new VBox(4, pageTitle, pageSubtitle);
 
-        int totalCases = caseDao.countAll();
-        int openCases = caseDao.countByStatus("OPEN");
-        int closedCases = caseDao.countByStatus("CLOSED");
-        int totalOffenders = personDao.countAll();
-
-        HBox statsRow = new HBox(16);
+        statsRow = new HBox(16);
         statsRow.getChildren().addAll(
-            createStatCard("Total Cases", String.valueOf(totalCases), tm.accentBlue()),
-            createStatCard("Open Cases", String.valueOf(openCases), tm.accentGreen()),
-            createStatCard("Closed Cases", String.valueOf(closedCases), tm.accentOrange()),
-            createStatCard("Persons on Record", String.valueOf(totalOffenders), tm.accentPurple())
+            createStatCard("Total Cases", "...", tm.accentBlue()),
+            createStatCard("Open Cases", "...", tm.accentGreen()),
+            createStatCard("Closed Cases", "...", tm.accentOrange()),
+            createStatCard("Persons on Record", "...", tm.accentPurple())
         );
 
         // --- Quick Actions ---
@@ -82,10 +116,12 @@ public class DashboardView {
         Label recentTitle = new Label("Recent Cases");
         recentTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
 
-        TableView<CourtCase> recentTable = createRecentCasesTable();
+        recentTable = createRecentCasesTable();
+        recentTable.setPlaceholder(new Label("Loading..."));
         VBox.setVgrow(recentTable, Priority.ALWAYS);
 
         root.getChildren().addAll(titleBox, statsRow, actionsTitle, actionsRow, recentTitle, recentTable);
+        System.out.println("[DEBUG] Dashboard: buildUI TOTAL: " + (System.currentTimeMillis() - t0) + "ms");
     }
 
     private VBox createStatCard(String label, String value, String color) {
