@@ -47,7 +47,7 @@ public class LoginView {
         icon.setFitWidth(48);
         icon.setFitHeight(48);
         icon.setPreserveRatio(true);
-        InputStream iconIs = LoginView.class.getResourceAsStream("/icons/app.ico");
+        InputStream iconIs = LoginView.class.getResourceAsStream("/icons/app.png");
         if (iconIs != null) {
             icon.setImage(new Image(iconIs, 48, 48, true, true));
         }

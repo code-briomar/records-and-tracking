@@ -4,6 +4,8 @@
 
 This project is designed to support Kenyan court clerks by digitizing and streamlining their daily tasks.
 
+# Run Project `mvn javafx:run`
+
 ## Auto-Update System
 
 The app includes automatic update detection and installation. When a new version is released on GitHub, users will be notified and can update with one click.
