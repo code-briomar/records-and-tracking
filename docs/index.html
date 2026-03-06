@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CourtTrack - Download</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/png" href="icon.png">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <img src="icon.png" alt="CourtTrack Logo" class="logo-icon">
+                <span class="logo-text">CourtTrack</span>
+            </div>
+            <nav class="nav">
+                <a href="#features">Features</a>
+                <a href="#download" class="nav-download">Download</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="container">
+                <h1>Kenyan Court Records &amp; Tracking System</h1>
+                <p class="tagline">Manage case files, track court dates, and organize legal documents with ease</p>
+                <a href="#download" class="btn btn-primary btn-large">Download for Windows</a>
+                <p class="version-info">Latest version: <span id="latest-version">Loading...</span></p>
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <div class="container">
+                <h2>Features</h2>
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">📁</div>
+                        <h3>Case Management</h3>
+                        <p>Create and manage case files with complete details including case number, parties, filing date, and case type.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📅</div>
+                        <h3>Court Date Tracking</h3>
+                        <p>Track all court appearances and hearing dates. Get reminders for upcoming appointments.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">⚖️</div>
+                        <h3>Case Status Updates</h3>
+                        <p>Monitor case progress from filing to disposition. Track ruling dates and final judgments.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔍</div>
+                        <h3>Powerful Search</h3>
+                        <p>Find any case instantly with advanced search by case number, party name, or date range.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📊</div>
+                        <h3>Reporting</h3>
+                        <p>Generate reports on case status, pending hearings, and case statistics.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🔒</div>
+                        <h3>Secure Storage</h3>
+                        <p>All your data is stored locally on your computer. No cloud required - complete privacy.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="download" class="download-section">
+            <div class="container">
+                <h2>Download</h2>
+                <div class="download-card">
+                    <div class="download-info">
+                        <h3>Windows Installer (MSI)</h3>
+                        <p>Per-user installation - no administrator privileges required</p>
+                        <ul class="system-requirements">
+                            <li><strong>OS:</strong> Windows 10 or later</li>
+                            <li><strong>Disk Space:</strong> ~150 MB</li>
+                            <li><strong>Runtime:</strong> Included in installer</li>
+                        </ul>
+                    </div>
+                    <div class="download-action">
+                        <a id="download-btn" href="#" class="btn btn-primary btn-large">
+                            <span class="btn-text">Download MSI</span>
+                            <span class="btn-size" id="download-size"></span>
+                        </a>
+                        <p class="release-date">Released: <span id="release-date">Loading...</span></p>
+                    </div>
+                </div>
+                <div id="no-msi" class="no-msi-message" style="display: none;">
+                    <p>MSI installer not available for this release yet. Please check back later or download the JAR version.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="about">
+            <div class="container">
+                <h2>About CourtTrack</h2>
+                <p>CourtTrack is a desktop application designed specifically for the Kenyan legal system. It helps lawyers, paralegals, and court staff manage case files and track court proceedings efficiently.</p>
+                <p class="copyright">Built with JavaFX</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 CourtTrack. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
