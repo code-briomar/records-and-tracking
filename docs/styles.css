@@ -343,4 +343,8 @@ body {
     .nav {
         gap: 16px;
     }
+    
+    .logo-text {
+        display: none;
+    }
 }
