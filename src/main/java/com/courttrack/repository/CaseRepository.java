@@ -24,6 +24,14 @@ public class CaseRepository {
     public void getAll(Consumer<List<CourtCase>> onResult) {
         executor.submit(() -> onResult.accept(dao.findAll()));
     }
+
+    public void getAllPaginated(String status, String category, int offset, int limit, Consumer<List<CourtCase>> onResult) {
+        executor.submit(() -> onResult.accept(dao.findByStatusAndCategoryPaginated(status, category, offset, limit)));
+    }
+
+    public void countByStatusAndCategory(String status, String category, Consumer<Integer> onResult) {
+        executor.submit(() -> onResult.accept(dao.countByStatusAndCategory(status, category)));
+    }
     public void getByStatusAndCategory(String status, String category, Consumer<List<CourtCase>> onResult) {
         executor.submit(() -> onResult.accept(dao.findByStatusAndCategory(status, category)));
     }
@@ -57,6 +65,15 @@ public class CaseRepository {
             if (onComplete != null) onComplete.run();
         });
     }
+
+    public void delete(String caseId, Runnable onComplete) {
+        executor.submit(() -> {
+            dao.softDelete(caseId);
+            SyncCoordinator.getInstance().queueCaseSync(caseId, "DELETE", null);
+            if (onComplete != null) onComplete.run();
+        });
+    }
+
     public void shutdown() {
         executor.shutdown();
     }

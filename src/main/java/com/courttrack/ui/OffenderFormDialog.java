@@ -3,6 +3,7 @@ package com.courttrack.ui;
 import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
+import com.courttrack.repository.CaseRepository;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -44,9 +45,9 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
     private final TextField emailField;
     private final ComboBox<CourtCase> caseBox;
 
-    private final CaseDao caseDao = new CaseDao();
+    private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
-    private final ObservableList<CourtCase> caseItems;
+    private final ObservableList<CourtCase> caseItems = FXCollections.observableArrayList();
 
     public OffenderFormDialog(Person existing) {
         setTitle(existing == null ? "Add New Person" : "Edit Person");
@@ -79,10 +80,13 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
         emailField = new TextField();
         emailField.setPromptText("e.g., name@email.com");
 
-        caseItems = FXCollections.observableArrayList(caseDao.findAll());
         caseBox = new ComboBox<>(caseItems);
         caseBox.setMaxWidth(Double.MAX_VALUE);
         caseBox.setPromptText("Select a case...");
+        
+        caseRepo.getAll(cases -> {
+            javafx.application.Platform.runLater(() -> caseItems.setAll(cases));
+        });
         caseBox.setConverter(new StringConverter<>() {
             @Override
             public String toString(CourtCase c) {
@@ -261,9 +265,12 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
         CaseFormDialog dialog = new CaseFormDialog(null);
         Optional<CourtCase> result = dialog.showAndWait();
         result.ifPresent(newCase -> {
-            caseDao.insert(newCase);
-            caseItems.add(newCase);
-            caseBox.setValue(newCase);
+            caseRepo.save(newCase, null, () -> {
+                javafx.application.Platform.runLater(() -> {
+                    caseItems.add(newCase);
+                    caseBox.setValue(newCase);
+                });
+            });
         });
     }
 

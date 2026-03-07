@@ -26,6 +26,20 @@ public class PersonRepository {
             onResult.accept(result);
         });
     }
+
+    public void getAllPaginated(int offset, int limit, Consumer<List<Person>> onResult) {
+        executor.submit(() -> {
+            List<Person> result = dao.findAllPaginated(offset, limit);
+            onResult.accept(result);
+        });
+    }
+
+    public void countAll(Consumer<Integer> onResult) {
+        executor.submit(() -> {
+            int count = dao.countAll();
+            onResult.accept(count);
+        });
+    }
     public void search(String query, Consumer<List<Person>> onResult) {
         executor.submit(() -> {
             List<Person> result = dao.search(query);

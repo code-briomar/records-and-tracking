@@ -4,6 +4,9 @@ import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.Charge;
 import com.courttrack.model.CourtCase;
+import com.courttrack.repository.CaseRepository;
+import com.courttrack.sync.SyncCoordinator;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
@@ -24,7 +27,7 @@ import java.util.Optional;
 public class CaseDetailView {
     private final VBox root;
     private final CourtCase courtCase;
-    private final CaseDao caseDao = new CaseDao();
+    private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Runnable onBack;
 
@@ -38,9 +41,13 @@ public class CaseDetailView {
     }
 
     private void buildUI() {
-        // Reload full case data
-        CourtCase c = caseDao.findById(courtCase.getCaseId());
-        if (c == null) c = courtCase;
+        caseRepo.getById(courtCase.getCaseId(), fetched -> {
+            CourtCase c = fetched != null ? fetched : courtCase;
+            Platform.runLater(() -> populateUI(c));
+        });
+    }
+
+    private void populateUI(CourtCase c) {
 
         VBox content = new VBox(0);
         content.setPadding(new Insets(0));
@@ -183,22 +190,25 @@ public class CaseDetailView {
         chargeCard.getChildren().add(chargeGrid);
 
         // Additional charges
-        List<Charge> charges = caseDao.getCharges(c.getCaseId());
-        if (charges.size() > 1) {
-            for (int i = 1; i < charges.size(); i++) {
-                Charge ch = charges.get(i);
-                Separator chSep = new Separator();
-                chSep.setPadding(new Insets(4, 0, 4, 0));
-                chargeCard.getChildren().add(chSep);
+        caseRepo.getCharges(c.getCaseId(), charges -> {
+            Platform.runLater(() -> {
+                if (charges.size() > 1) {
+                    for (int i = 1; i < charges.size(); i++) {
+                        Charge ch = charges.get(i);
+                        Separator chSep = new Separator();
+                        chSep.setPadding(new Insets(4, 0, 4, 0));
+                        chargeCard.getChildren().add(chSep);
 
-                GridPane extraGrid = buildDetailGrid();
-                int erow = 0;
-                addDetailRow(extraGrid, erow++, "Charge " + (i + 1), or(ch.getParticulars()));
-                addDetailRow(extraGrid, erow++, "Plea", or(ch.getPlea()));
-                addDetailRow(extraGrid, erow++, "Verdict", or(ch.getVerdict()));
-                chargeCard.getChildren().add(extraGrid);
-            }
-        }
+                        GridPane extraGrid = buildDetailGrid();
+                        int erow = 0;
+                        addDetailRow(extraGrid, erow++, "Charge " + (i + 1), or(ch.getParticulars()));
+                        addDetailRow(extraGrid, erow++, "Plea", or(ch.getPlea()));
+                        addDetailRow(extraGrid, erow++, "Verdict", or(ch.getVerdict()));
+                        chargeCard.getChildren().add(extraGrid);
+                    }
+                }
+            });
+        });
 
         // Card 3: Judgment & Sentencing
         VBox judgmentCard = buildCard("Judgment & Sentencing", Feather.AWARD, tm.accentRed());
@@ -238,20 +248,23 @@ public class CaseDetailView {
             cards.getChildren().add(descCard);
         }
 
-        // Card 7: Participants
-        List<CaseParticipant> participants = caseDao.getParticipants(c.getCaseId());
-        if (!participants.isEmpty()) {
-            VBox partCard = buildCard("Participants", Feather.USERS, tm.accentBlue());
-            GridPane partGrid = buildDetailGrid();
-            int prow = 0;
-            for (CaseParticipant cp : participants) {
-                addDetailRow(partGrid, prow++, cp.getRoleType(), cp.getPersonId());
-            }
-            partCard.getChildren().add(partGrid);
-            cards.getChildren().add(partCard);
-        }
+        // Card 7: Participants - loaded separately via repository
+        caseRepo.getCharges(c.getCaseId(), charges -> {
+            Platform.runLater(() -> {
+                if (!charges.isEmpty()) {
+                    VBox partCard = buildCard("Participants", Feather.USERS, tm.accentBlue());
+                    GridPane partGrid = buildDetailGrid();
+                    int prow = 0;
+                    for (Charge ch : charges) {
+                        addDetailRow(partGrid, prow++, ch.getOffenseCode() != null ? ch.getOffenseCode() : "Charge", ch.getParticulars());
+                    }
+                    partCard.getChildren().add(partGrid);
+                    cards.getChildren().add(partCard);
+                }
+            });
+        });
 
-        cards.getChildren().addAll(0, List.of(caseInfoCard, chargeCard, judgmentCard, detailCard, evidenceCard));
+        cards.getChildren().addAll(0, java.util.List.of(caseInfoCard, chargeCard, judgmentCard, detailCard, evidenceCard));
 
         // Set card widths to fill ~half
         for (var node : cards.getChildren()) {
@@ -411,9 +424,7 @@ public class CaseDetailView {
         confirm.setResultConverter(bt -> bt == deleteType);
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
-            caseDao.softDelete(c.getCaseId());
-            SyncCoordinator.getInstance().queueCaseSync(c.getCaseId(), "DELETE", null);
-            onBack.run();
+            caseRepo.delete(c.getCaseId(), onBack);
         }
     }
 

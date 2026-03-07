@@ -1,35 +1,49 @@
 package com.courttrack.ui;
 
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Consumer;
+
+import org.kordamp.ikonli.feather.Feather;
+import org.kordamp.ikonli.javafx.FontIcon;
+
 import com.courttrack.dao.CaseDao;
-import com.courttrack.dao.PersonDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.Person;
+import com.courttrack.repository.PersonRepository;
+import com.courttrack.repository.CaseRepository;
+
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
-import javafx.scene.control.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.TableCell;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.layout.*;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
-
 import javafx.stage.Modality;
-import org.kordamp.ikonli.feather.Feather;
-import org.kordamp.ikonli.javafx.FontIcon;
-
-import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.function.Consumer;
 
 public class OffenderListView {
     private final VBox root;
-    private final PersonDao personDao = new PersonDao();
-    private final CaseDao caseDao = new CaseDao();
+    private final PersonRepository personRepo = PersonRepository.getInstance();
+    private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Consumer<Person> onViewDetail;
     private TableView<Person> table;
@@ -52,33 +66,27 @@ public class OffenderListView {
     private void loadPage() {
         String query = searchField.getText();
         
-        new Thread(() -> {
-            long t0 = System.currentTimeMillis();
-            List<Person> persons;
-            int count;
-            if (query != null && !query.isEmpty()) {
-                persons = personDao.search(query);
-                count = persons.size();
-                final int fCount = count;
-                final List<Person> fPersons = persons.stream().skip(currentPage * pageSize).limit(pageSize).toList();
-                System.out.println("[DEBUG] OffenderListView: loadPage DB: " + (System.currentTimeMillis() - t0) + "ms");
+        if (query != null && !query.isEmpty()) {
+            personRepo.search(query, persons -> {
+                int count = persons.size();
+                List<Person> paged = persons.stream().skip(currentPage * pageSize).limit(pageSize).toList();
                 Platform.runLater(() -> {
-                    personList.setAll(fPersons);
-                    totalCount = fCount;
-                    updatePaginationControls();
-                });
-            } else {
-                persons = personDao.findAllPaginated(currentPage * pageSize, pageSize);
-                count = personDao.countAll();
-                System.out.println("[DEBUG] OffenderListView: loadPage DB: " + (System.currentTimeMillis() - t0) + "ms");
-                final List<Person> fPersons = persons;
-                Platform.runLater(() -> {
-                    personList.setAll(fPersons);
+                    personList.setAll(paged);
                     totalCount = count;
                     updatePaginationControls();
                 });
-            }
-        }).start();
+            });
+        } else {
+            personRepo.getAllPaginated(currentPage * pageSize, pageSize, persons -> {
+                personRepo.countAll(count -> {
+                    Platform.runLater(() -> {
+                        personList.setAll(persons);
+                        totalCount = count;
+                        updatePaginationControls();
+                    });
+                });
+            });
+        }
     }
 
     private void updatePaginationControls() {
@@ -189,14 +197,15 @@ public class OffenderListView {
         OffenderFormDialog dialog = new OffenderFormDialog(null);
         Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
         result.ifPresent(link -> {
-            Person p = link.getPerson();
-            personDao.insert(p);
-            CaseParticipant cp = new CaseParticipant();
-            cp.setCaseId(link.getCourtCase().getCaseId());
-            cp.setPersonId(p.getPersonId());
-            cp.setRoleType("Accused");
-            caseDao.addParticipant(cp);
-            refreshTable();
+            personRepo.save(link.getPerson(), () -> {
+                CaseParticipant cp = new CaseParticipant();
+                cp.setCaseId(link.getCourtCase().getCaseId());
+                cp.setPersonId(link.getPerson().getPersonId());
+                cp.setRoleType("Accused");
+                com.courttrack.dao.CaseDao caseDao = new com.courttrack.dao.CaseDao();
+                caseDao.addParticipant(cp);
+                Platform.runLater(this::refreshTable);
+            });
         });
     }
 
@@ -241,7 +250,9 @@ public class OffenderListView {
     private void handleEdit(Person p) {
         OffenderFormDialog dialog = new OffenderFormDialog(p);
         Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
-        result.ifPresent(link -> { personDao.update(link.getPerson()); refreshTable(); });
+        result.ifPresent(link -> {
+            personRepo.save(link.getPerson(), this::refreshTable);
+        });
     }
 
     private void handleDelete(Person p) {
@@ -283,9 +294,7 @@ public class OffenderListView {
         confirm.setResultConverter(bt -> bt == deleteType);
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
-            personDao.softDelete(p.getPersonId());
-            com.courttrack.sync.SyncCoordinator.getInstance().queuePersonSync(p.getPersonId(), "DELETE");
-            refreshTable();
+            personRepo.delete(p.getPersonId(), this::refreshTable);
         }
     }
 

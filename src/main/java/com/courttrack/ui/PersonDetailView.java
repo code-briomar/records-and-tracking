@@ -2,6 +2,9 @@ package com.courttrack.ui;
 
 import com.courttrack.dao.PersonDao;
 import com.courttrack.model.Person;
+import com.courttrack.repository.PersonRepository;
+import com.courttrack.sync.SyncCoordinator;
+import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
@@ -13,7 +16,6 @@ import javafx.scene.text.FontWeight;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
-import com.courttrack.sync.SyncCoordinator;
 import javafx.stage.Modality;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -22,7 +24,7 @@ import java.util.Optional;
 public class PersonDetailView {
     private final VBox root;
     private final Person person;
-    private final PersonDao personDao = new PersonDao();
+    private final PersonRepository personRepo = PersonRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Runnable onBack;
 
@@ -36,8 +38,13 @@ public class PersonDetailView {
     }
 
     private void buildUI() {
-        Person p = personDao.findById(person.getPersonId());
-        if (p == null) p = person;
+        personRepo.getById(person.getPersonId(), fetched -> {
+            Person personToShow = fetched != null ? fetched : person;
+            Platform.runLater(() -> populateUI(personToShow));
+        });
+    }
+
+    private void populateUI(Person p) {
 
         VBox content = new VBox(0);
 
@@ -320,9 +327,12 @@ public class PersonDetailView {
         OffenderFormDialog dialog = new OffenderFormDialog(p);
         Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
         result.ifPresent(link -> {
-            personDao.update(link.getPerson());
-            root.getChildren().clear();
-            buildUI();
+            personRepo.save(link.getPerson(), () -> {
+                Platform.runLater(() -> {
+                    root.getChildren().clear();
+                    buildUI();
+                });
+            });
         });
     }
 
@@ -362,9 +372,7 @@ public class PersonDetailView {
         confirm.setResultConverter(bt -> bt == deleteType);
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
-            personDao.softDelete(p.getPersonId());
-            SyncCoordinator.getInstance().queuePersonSync(p.getPersonId(), "DELETE");
-            onBack.run();
+            personRepo.delete(p.getPersonId(), onBack);
         }
     }
 

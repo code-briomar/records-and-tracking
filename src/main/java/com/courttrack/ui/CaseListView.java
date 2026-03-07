@@ -2,6 +2,8 @@ package com.courttrack.ui;
 
 import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CourtCase;
+import com.courttrack.repository.CaseRepository;
+import com.courttrack.sync.SyncCoordinator;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
@@ -26,7 +28,7 @@ import javafx.stage.Modality;
 
 public class CaseListView {
     private final VBox root;
-    private final CaseDao caseDao = new CaseDao();
+    private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Consumer<CourtCase> onViewDetail;
     private TableView<CourtCase> table;
@@ -59,33 +61,27 @@ public class CaseListView {
         
         int offset = currentPage * pageSize;
         
-        new Thread(() -> {
-            long t0 = System.currentTimeMillis();
-            List<CourtCase> cases;
-            int count;
-            if (query != null && !query.isEmpty()) {
-                cases = caseDao.search(query);
-                count = cases.size();
-                final int fCount = count;
-                final List<CourtCase> fCases = cases.stream().skip(offset).limit(pageSize).toList();
-                System.out.println("[DEBUG] CaseListView: loadPage DB query: " + (System.currentTimeMillis() - t0) + "ms");
+        if (query != null && !query.isEmpty()) {
+            caseRepo.search(query, cases -> {
+                int count = cases.size();
+                List<CourtCase> paged = cases.stream().skip(offset).limit(pageSize).toList();
                 Platform.runLater(() -> {
-                    caseList.setAll(fCases);
-                    totalCount = fCount;
-                    updatePaginationControls();
-                });
-            } else {
-                cases = caseDao.findByStatusAndCategoryPaginated(status, category, offset, pageSize);
-                count = caseDao.countByStatusAndCategory(status, category);
-                System.out.println("[DEBUG] CaseListView: loadPage DB query: " + (System.currentTimeMillis() - t0) + "ms");
-                final List<CourtCase> finalCases = cases;
-                Platform.runLater(() -> {
-                    caseList.setAll(finalCases);
+                    caseList.setAll(paged);
                     totalCount = count;
                     updatePaginationControls();
                 });
-            }
-        }).start();
+            });
+        } else {
+            caseRepo.getAllPaginated(status, category, offset, pageSize, cases -> {
+                caseRepo.countByStatusAndCategory(status, category, count -> {
+                    Platform.runLater(() -> {
+                        caseList.setAll(cases);
+                        totalCount = count;
+                        updatePaginationControls();
+                    });
+                });
+            });
+        }
     }
 
     private void updatePaginationControls() {
@@ -299,8 +295,11 @@ public class CaseListView {
         String query = searchField.getText().trim();
         String status = statusFilter.getValue();
         String category = categoryFilter.getValue();
-        if (!query.isEmpty()) { caseList.setAll(caseDao.search(query)); }
-        else { caseList.setAll(caseDao.findByStatusAndCategory(status, category)); }
+        if (!query.isEmpty()) {
+            caseRepo.search(query, cases -> Platform.runLater(() -> caseList.setAll(cases)));
+        } else {
+            caseRepo.getByStatusAndCategory(status, category, cases -> Platform.runLater(() -> caseList.setAll(cases)));
+        }
     }
 
     private Button iconBtn(Feather icon, String tooltip, String color) {
@@ -336,9 +335,14 @@ public class CaseListView {
         CaseFormDialog dialog = new CaseFormDialog(null);
         Optional<CourtCase> result = dialog.showAndWait();
         result.ifPresent(c -> {
-            caseDao.insert(c);
-            caseDao.upsertFirstCharge(c.getCaseId(), c.getChargeParticulars(), c.getChargePlea(), c.getChargeVerdict());
-            refreshTable();
+            caseRepo.save(c, null, () -> {
+                com.courttrack.model.Charge charge = new com.courttrack.model.Charge();
+                charge.setCaseId(c.getCaseId());
+                charge.setParticulars(c.getChargeParticulars());
+                charge.setPlea(c.getChargePlea());
+                charge.setVerdict(c.getChargeVerdict());
+                caseRepo.saveCharge(charge, this::refreshTable);
+            });
         });
     }
 
@@ -352,9 +356,14 @@ public class CaseListView {
         CaseFormDialog dialog = new CaseFormDialog(c);
         Optional<CourtCase> result = dialog.showAndWait();
         result.ifPresent(updated -> {
-            caseDao.update(updated);
-            caseDao.upsertFirstCharge(updated.getCaseId(), updated.getChargeParticulars(), updated.getChargePlea(), updated.getChargeVerdict());
-            refreshTable();
+            caseRepo.save(updated, null, () -> {
+                com.courttrack.model.Charge charge = new com.courttrack.model.Charge();
+                charge.setCaseId(updated.getCaseId());
+                charge.setParticulars(updated.getChargeParticulars());
+                charge.setPlea(updated.getChargePlea());
+                charge.setVerdict(updated.getChargeVerdict());
+                caseRepo.saveCharge(charge, this::refreshTable);
+            });
         });
     }
 
@@ -397,9 +406,12 @@ public class CaseListView {
         confirm.setResultConverter(bt -> bt == deleteType);
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
-            caseDao.softDelete(c.getCaseId());
-            SyncCoordinator.getInstance().queueCaseSync(c.getCaseId(), "DELETE", null);
-            refreshTable();
+            caseRepo.getById(c.getCaseId(), courtCase -> {
+                if (courtCase != null) {
+                    courtCase.setDeleted(true);
+                    caseRepo.save(courtCase, null, this::refreshTable);
+                }
+            });
         }
     }
 
