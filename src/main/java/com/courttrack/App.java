@@ -301,7 +301,8 @@ public class App extends Application {
                 userData.put("email", rs.getString("email"));
                 userData.put("fullName", rs.getString("full_name"));
                 userData.put("role", rs.getString("role"));
-                userData.put("status", rs.getString("status"));
+                String status = rs.getString("status");
+                userData.put("status", status != null ? status : "ACTIVE");
                 userData.put("passwordHash", rs.getString("password_hash"));
                 userData.put("salt", rs.getString("salt"));
                 userData.put("courtName", rs.getString("court_id")); //store courtId temporarily
