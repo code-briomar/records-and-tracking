@@ -54,6 +54,11 @@ public class CaseListView {
         System.out.println("[DEBUG] CaseListView constructor TOTAL: " + (System.currentTimeMillis() - t0) + "ms");
     }
 
+    public void refresh() {
+        currentPage = 0;
+        loadPage();
+    }
+
     private void loadPage() {
         String status = statusFilter.getValue();
         String category = categoryFilter.getValue();

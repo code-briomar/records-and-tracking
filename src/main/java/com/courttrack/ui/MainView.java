@@ -1,34 +1,40 @@
 package com.courttrack.ui;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import org.kordamp.ikonli.feather.Feather;
+import org.kordamp.ikonli.javafx.FontIcon;
+
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.sync.SyncStatus;
 import com.courttrack.update.UpdateInfo;
+import com.courttrack.util.VersionPreferences;
 
 import javafx.animation.Animation;
 import javafx.animation.Interpolator;
-import javafx.animation.KeyFrame;
-import javafx.animation.KeyValue;
 import javafx.animation.RotateTransition;
-import javafx.animation.Timeline;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
 import javafx.util.Duration;
-
-import org.kordamp.ikonli.feather.Feather;
-import org.kordamp.ikonli.javafx.FontIcon;
-
-import java.util.ArrayList;
-import java.util.List;
-
-import com.courttrack.util.VersionPreferences;
 
 public class MainView {
 
@@ -56,6 +62,11 @@ public class MainView {
     // Update notification
     private VBox centerWrapper;
     private UpdateNotificationBar updateBar;
+
+    // Cached views - created once, reused forever
+    private DashboardView cachedDashboard;
+    private CaseListView cachedCases;
+    private OffenderListView cachedOffenders;
 
     public MainView(String username, Runnable onLogout) {
         this.username = username;
@@ -559,24 +570,62 @@ public class MainView {
     }
 
     private void navigateTo(String page) {
-        long startTime = System.currentTimeMillis();
-        currentPage = page;
-        System.out.println("[DEBUG] navigateTo: " + page + " starting...");
+        if (cachedDashboard == null) {
+            cachedDashboard = new DashboardView(
+                    () -> navigateTo("cases"),
+                    () -> navigateTo("offenders"),
+                    this::showCaseDetail
+            );
+            cachedCases = new CaseListView(this::showCaseDetail);
+            cachedOffenders = new OffenderListView(this::showPersonDetail);
 
-        for (Button btn : navButtons) {
-            btn.setStyle(navInactiveStyle());
-            btn.setOnMouseEntered(e -> {
-                if (btn != activeButton) {
-                    btn.setStyle(navHoverStyle());
-                }
-            });
-            btn.setOnMouseExited(e -> {
-                if (btn != activeButton) {
-                    btn.setStyle(navInactiveStyle());
-                }
-            });
+            cachedDashboard.getRoot().setVisible(false);
+            cachedDashboard.getRoot().setManaged(false);
+            cachedCases.getRoot().setVisible(false);
+            cachedCases.getRoot().setManaged(false);
+            cachedOffenders.getRoot().setVisible(false);
+            cachedOffenders.getRoot().setManaged(false);
+
+            contentArea.getChildren().addAll(
+                    cachedDashboard.getRoot(),
+                    cachedCases.getRoot(),
+                    cachedOffenders.getRoot()
+            );
         }
 
+        cachedDashboard.getRoot().setVisible(false);
+        cachedDashboard.getRoot().setManaged(false);
+        cachedCases.getRoot().setVisible(false);
+        cachedCases.getRoot().setManaged(false);
+        cachedOffenders.getRoot().setVisible(false);
+        cachedOffenders.getRoot().setManaged(false);
+
+        switch (page) {
+            case "dashboard" -> {
+                cachedDashboard.getRoot().setVisible(true);
+                cachedDashboard.getRoot().setManaged(true);
+                cachedDashboard.refresh();
+            }
+            case "cases" -> {
+                cachedCases.getRoot().setVisible(true);
+                cachedCases.getRoot().setManaged(true);
+                cachedCases.refresh();
+            }
+            case "offenders" -> {
+                cachedOffenders.getRoot().setVisible(true);
+                cachedOffenders.getRoot().setManaged(true);
+                cachedOffenders.refresh();
+            }
+        }
+
+        currentPage = page;
+        updateNavHighlight(page);
+    }
+
+    private void updateNavHighlight(String page) {
+        for (Button btn : navButtons) {
+            btn.setStyle(navInactiveStyle());
+        }
         int idx = switch (page) {
             case "dashboard" ->
                 0;
@@ -591,39 +640,6 @@ public class MainView {
             activeButton = navButtons.get(idx);
             activeButton.setStyle(navActiveStyle());
         }
-
-        contentArea.getChildren().clear();
-        long beforeViewCreate = System.currentTimeMillis();
-        System.out.println("[DEBUG] navigateTo: " + page + " - UI setup took: " + (beforeViewCreate - startTime) + "ms");
-        
-        Parent view = switch (page) {
-            case "dashboard" -> {
-                long t0 = System.currentTimeMillis();
-                var v = new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
-                System.out.println("[DEBUG] DashboardView created in: " + (System.currentTimeMillis() - t0) + "ms");
-                yield v;
-            }
-            case "cases" -> {
-                long t0 = System.currentTimeMillis();
-                var v = new CaseListView(this::showCaseDetail).getRoot();
-                System.out.println("[DEBUG] CaseListView created in: " + (System.currentTimeMillis() - t0) + "ms");
-                yield v;
-            }
-            case "offenders" -> {
-                long t0 = System.currentTimeMillis();
-                var v = new OffenderListView(this::showPersonDetail).getRoot();
-                System.out.println("[DEBUG] OffenderListView created in: " + (System.currentTimeMillis() - t0) + "ms");
-                yield v;
-            }
-            default -> {
-                long t0 = System.currentTimeMillis();
-                var v = new DashboardView(() -> navigateTo("cases"), () -> navigateTo("offenders"), this::showCaseDetail).getRoot();
-                System.out.println("[DEBUG] DashboardView (default) created in: " + (System.currentTimeMillis() - t0) + "ms");
-                yield v;
-            }
-        };
-        contentArea.getChildren().add(view);
-        System.out.println("[DEBUG] navigateTo: " + page + " TOTAL time: " + (System.currentTimeMillis() - startTime) + "ms");
     }
 
     public void showCaseDetail(CourtCase courtCase) {

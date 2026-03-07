@@ -49,6 +49,10 @@ public class DashboardView {
         loadDataAsync();
     }
 
+    public void refresh() {
+        loadDataAsync();
+    }
+
     private void loadDataAsync() {
         // Load stats in background
         new Thread(() -> {

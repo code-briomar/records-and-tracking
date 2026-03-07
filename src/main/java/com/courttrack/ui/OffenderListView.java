@@ -63,6 +63,11 @@ public class OffenderListView {
         loadPage();
     }
 
+    public void refresh() {
+        currentPage = 0;
+        loadPage();
+    }
+
     private void loadPage() {
         String query = searchField.getText();
         
