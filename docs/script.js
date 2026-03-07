@@ -49,14 +49,24 @@ async function updateDownloadInfo() {
     const downloadBtn = document.getElementById('download-btn');
     const downloadSize = document.getElementById('download-size');
     const noMsiMessage = document.getElementById('no-msi');
+    const heroBtn = document.getElementById('hero-download-btn');
 
     if (msiAsset) {
-        downloadBtn.href = msiAsset.browser_download_url;
-        downloadSize.textContent = `(${formatFileSize(msiAsset.size)})`;
+        const downloadUrl = msiAsset.browser_download_url;
+        const fileSize = formatFileSize(msiAsset.size);
+        
+        downloadBtn.href = downloadUrl;
+        downloadSize.textContent = `(${fileSize})`;
         downloadBtn.style.display = 'inline-flex';
+        heroBtn.href = downloadUrl;
         noMsiMessage.style.display = 'none';
     } else {
         downloadBtn.style.display = 'none';
+        heroBtn.href = '#download';
+        heroBtn.onclick = function(e) {
+            e.preventDefault();
+            document.getElementById('download').scrollIntoView({ behavior: 'smooth' });
+        };
         noMsiMessage.style.display = 'block';
     }
 }
