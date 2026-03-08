@@ -38,15 +38,6 @@ public class CaseDetailView {
         this.onBack = onBack;
         this.root = new VBox(0);
         populateUI(courtCase);
-        refreshInBackground();
-    }
-
-    private void refreshInBackground() {
-        caseRepo.getById(courtCase.getCaseId(), fetched -> {
-            if (fetched != null) {
-                Platform.runLater(() -> populateUI(fetched));
-            }
-        });
     }
 
     private void populateUI(CourtCase c) {
