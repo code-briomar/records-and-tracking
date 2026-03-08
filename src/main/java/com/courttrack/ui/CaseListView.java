@@ -20,7 +20,9 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import com.courttrack.sync.SyncCoordinator;
@@ -36,11 +38,18 @@ public class CaseListView {
     private TextField searchField;
     private ComboBox<String> statusFilter;
     private ComboBox<String> categoryFilter;
+    private ComboBox<Integer> pageSizeSelector;
     private Button prevBtn, nextBtn;
     private Label pageLabel;
     private int currentPage = 0;
-    private int pageSize = 5;
+    private int pageSize = 15;
     private int totalCount = 0;
+    private final Map<String, List<CourtCase>> pageCache = new LinkedHashMap<String, List<CourtCase>>(5, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, List<CourtCase>> eldest) {
+            return size() > 5;
+        }
+    };
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
@@ -56,35 +65,85 @@ public class CaseListView {
 
     public void refresh() {
         currentPage = 0;
+        pageCache.clear();
         loadPage();
+    }
+
+    private String buildCacheKey(int page) {
+        String status = statusFilter.getValue();
+        String category = categoryFilter.getValue();
+        String query = searchField.getText();
+        return status + "|" + category + "|" + (query != null ? query : "") + "|" + page;
     }
 
     private void loadPage() {
         String status = statusFilter.getValue();
         String category = categoryFilter.getValue();
         String query = searchField.getText();
+        String cacheKey = buildCacheKey(currentPage);
         
         int offset = currentPage * pageSize;
+        
+        List<CourtCase> cached = pageCache.get(cacheKey);
+        if (cached != null) {
+            caseList.setAll(cached);
+            totalCount = cached.size() < pageSize && currentPage > 0 ? offset + cached.size() : offset + pageSize + (cached.size() == pageSize ? 0 : -1);
+            caseRepo.countByStatusAndCategory(status, category, count -> Platform.runLater(() -> {
+                totalCount = count;
+                updatePaginationControls();
+            }));
+            preloadNextPage();
+            return;
+        }
         
         if (query != null && !query.isEmpty()) {
             caseRepo.search(query, cases -> {
                 int count = cases.size();
                 List<CourtCase> paged = cases.stream().skip(offset).limit(pageSize).toList();
+                pageCache.put(buildCacheKey(currentPage), paged);
                 Platform.runLater(() -> {
                     caseList.setAll(paged);
                     totalCount = count;
                     updatePaginationControls();
                 });
+                preloadNextPage();
             });
         } else {
             caseRepo.getAllPaginated(status, category, offset, pageSize, cases -> {
+                pageCache.put(buildCacheKey(currentPage), cases);
                 caseRepo.countByStatusAndCategory(status, category, count -> {
                     Platform.runLater(() -> {
                         caseList.setAll(cases);
                         totalCount = count;
                         updatePaginationControls();
                     });
+                    preloadNextPage();
                 });
+            });
+        }
+    }
+
+    private void preloadNextPage() {
+        String nextKey = buildCacheKey(currentPage + 1);
+        if (pageCache.containsKey(nextKey)) return;
+        
+        String status = statusFilter.getValue();
+        String category = categoryFilter.getValue();
+        String query = searchField.getText();
+        int nextOffset = (currentPage + 1) * pageSize;
+        
+        if (query != null && !query.isEmpty()) {
+            caseRepo.search(query, cases -> {
+                if (cases.size() > nextOffset) {
+                    List<CourtCase> paged = cases.stream().skip(nextOffset).limit(pageSize).toList();
+                    pageCache.put(nextKey, paged);
+                }
+            });
+        } else {
+            caseRepo.getAllPaginated(status, category, nextOffset, pageSize, cases -> {
+                if (!cases.isEmpty()) {
+                    pageCache.put(nextKey, cases);
+                }
             });
         }
     }
@@ -109,15 +168,24 @@ public class CaseListView {
         searchField = new TextField();
         searchField.setPromptText("Search by case number, title, or sentence...");
         searchField.setPrefWidth(300);
-        searchField.textProperty().addListener((obs, o, n) -> { currentPage = 0; loadPage(); });
+        searchField.textProperty().addListener((obs, o, n) -> { pageCache.clear(); currentPage = 0; loadPage(); });
 
         statusFilter = new ComboBox<>(FXCollections.observableArrayList("All", "OPEN", "CLOSED", "ADJOURNED", "DISMISSED", "SETTLED"));
         statusFilter.setValue("All");
-        statusFilter.setOnAction(e -> { currentPage = 0; loadPage(); });
+        statusFilter.setOnAction(e -> { pageCache.clear(); currentPage = 0; loadPage(); });
 
         categoryFilter = new ComboBox<>(FXCollections.observableArrayList("All", "Criminal", "Traffic", "Civil"));
         categoryFilter.setValue("All");
-        categoryFilter.setOnAction(e -> { currentPage = 0; loadPage(); });
+        categoryFilter.setOnAction(e -> { pageCache.clear(); currentPage = 0; loadPage(); });
+
+        pageSizeSelector = new ComboBox<>(FXCollections.observableArrayList(5, 10, 15, 20, 25, 30, 40, 50, 75, 100));
+        pageSizeSelector.setValue(15);
+        pageSizeSelector.setOnAction(e -> {
+            pageSize = pageSizeSelector.getValue();
+            pageCache.clear();
+            currentPage = 0;
+            loadPage();
+        });
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -136,7 +204,10 @@ public class CaseListView {
         addBtn.getStyleClass().add("accent");
         addBtn.setOnAction(e -> handleAdd());
 
-        HBox toolbar = new HBox(10, searchField, statusFilter, categoryFilter, spacer, prevBtn, pageLabel, nextBtn, addBtn);
+        Label pageSizeLabel = new Label("Items:");
+        pageSizeLabel.setStyle("-fx-text-fill: #666;");
+
+        HBox toolbar = new HBox(10, searchField, statusFilter, categoryFilter, spacer, prevBtn, pageLabel, nextBtn, addBtn, pageSizeLabel, pageSizeSelector);
         toolbar.setAlignment(Pos.CENTER_LEFT);
 
         table = createTable();

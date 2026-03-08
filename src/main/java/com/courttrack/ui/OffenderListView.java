@@ -1,7 +1,9 @@
 package com.courttrack.ui;
 
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -23,6 +25,7 @@ import javafx.scene.Parent;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
@@ -49,11 +52,18 @@ public class OffenderListView {
     private TableView<Person> table;
     private ObservableList<Person> personList;
     private TextField searchField;
+    private ComboBox<Integer> pageSizeSelector;
     private Button prevBtn, nextBtn;
     private Label pageLabel;
     private int currentPage = 0;
-    private int pageSize = 5;
+    private int pageSize = 15;
     private int totalCount = 0;
+    private final Map<String, List<Person>> pageCache = new LinkedHashMap<String, List<Person>>(5, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, List<Person>> eldest) {
+            return size() > 5;
+        }
+    };
 
     public OffenderListView(Consumer<Person> onViewDetail) {
         this.onViewDetail = onViewDetail;
@@ -65,31 +75,76 @@ public class OffenderListView {
 
     public void refresh() {
         currentPage = 0;
+        pageCache.clear();
         loadPage();
+    }
+
+    private String buildCacheKey(int page) {
+        String query = searchField.getText();
+        return (query != null ? query : "") + "|" + page;
     }
 
     private void loadPage() {
         String query = searchField.getText();
+        String cacheKey = buildCacheKey(currentPage);
+        
+        List<Person> cached = pageCache.get(cacheKey);
+        if (cached != null) {
+            personList.setAll(cached);
+            personRepo.countAll(count -> Platform.runLater(() -> {
+                totalCount = count;
+                updatePaginationControls();
+            }));
+            preloadNextPage();
+            return;
+        }
         
         if (query != null && !query.isEmpty()) {
             personRepo.search(query, persons -> {
                 int count = persons.size();
                 List<Person> paged = persons.stream().skip(currentPage * pageSize).limit(pageSize).toList();
+                pageCache.put(buildCacheKey(currentPage), paged);
                 Platform.runLater(() -> {
                     personList.setAll(paged);
                     totalCount = count;
                     updatePaginationControls();
                 });
+                preloadNextPage();
             });
         } else {
             personRepo.getAllPaginated(currentPage * pageSize, pageSize, persons -> {
+                pageCache.put(buildCacheKey(currentPage), persons);
                 personRepo.countAll(count -> {
                     Platform.runLater(() -> {
                         personList.setAll(persons);
                         totalCount = count;
                         updatePaginationControls();
                     });
+                    preloadNextPage();
                 });
+            });
+        }
+    }
+
+    private void preloadNextPage() {
+        String nextKey = buildCacheKey(currentPage + 1);
+        if (pageCache.containsKey(nextKey)) return;
+        
+        String query = searchField.getText();
+        int nextOffset = (currentPage + 1) * pageSize;
+        
+        if (query != null && !query.isEmpty()) {
+            personRepo.search(query, persons -> {
+                if (persons.size() > nextOffset) {
+                    List<Person> paged = persons.stream().skip(nextOffset).limit(pageSize).toList();
+                    pageCache.put(nextKey, paged);
+                }
+            });
+        } else {
+            personRepo.getAllPaginated(nextOffset, pageSize, persons -> {
+                if (!persons.isEmpty()) {
+                    pageCache.put(nextKey, persons);
+                }
             });
         }
     }
@@ -117,7 +172,16 @@ public class OffenderListView {
         searchField = new TextField();
         searchField.setPromptText("Filter...");
         searchField.setPrefWidth(240);
-        searchField.textProperty().addListener((obs, o, n) -> { currentPage = 0; loadPage(); });
+        searchField.textProperty().addListener((obs, o, n) -> { pageCache.clear(); currentPage = 0; loadPage(); });
+
+        pageSizeSelector = new ComboBox<>(FXCollections.observableArrayList(5, 10, 15, 20, 25, 30, 40, 50, 75, 100));
+        pageSizeSelector.setValue(15);
+        pageSizeSelector.setOnAction(e -> {
+            pageSize = pageSizeSelector.getValue();
+            pageCache.clear();
+            currentPage = 0;
+            loadPage();
+        });
 
         prevBtn = new Button("Prev");
         prevBtn.setOnAction(e -> { if (currentPage > 0) { currentPage--; loadPage(); } });
@@ -136,7 +200,10 @@ public class OffenderListView {
         addBtn.getStyleClass().add("accent");
         addBtn.setOnAction(e -> handleAdd());
 
-        toolbar.getChildren().addAll(searchField, prevBtn, pageLabel, nextBtn, spacer, addBtn);
+        Label pageSizeLabel = new Label("Items:");
+        pageSizeLabel.setStyle("-fx-text-fill: #666;");
+
+        toolbar.getChildren().addAll(searchField, prevBtn, pageLabel, nextBtn, spacer, addBtn, pageSizeLabel, pageSizeSelector);
 
         table = createTable();
         personList = FXCollections.observableArrayList();
