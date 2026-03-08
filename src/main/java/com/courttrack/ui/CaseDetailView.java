@@ -37,13 +37,15 @@ public class CaseDetailView {
         this.courtCase = courtCase;
         this.onBack = onBack;
         this.root = new VBox(0);
-        buildUI();
+        populateUI(courtCase);
+        refreshInBackground();
     }
 
-    private void buildUI() {
+    private void refreshInBackground() {
         caseRepo.getById(courtCase.getCaseId(), fetched -> {
-            CourtCase c = fetched != null ? fetched : courtCase;
-            Platform.runLater(() -> populateUI(c));
+            if (fetched != null) {
+                Platform.runLater(() -> populateUI(fetched));
+            }
         });
     }
 
@@ -382,9 +384,14 @@ public class CaseDetailView {
             dao.update(updated);
             dao.upsertFirstCharge(updated.getCaseId(), updated.getChargeParticulars(),
                 updated.getChargePlea(), updated.getChargeVerdict());
-            // Rebuild the view with fresh data
-            root.getChildren().clear();
-            buildUI();
+            caseRepo.getById(updated.getCaseId(), refreshed -> {
+                if (refreshed != null) {
+                    Platform.runLater(() -> {
+                        root.getChildren().clear();
+                        populateUI(refreshed);
+                    });
+                }
+            });
         });
     }
 

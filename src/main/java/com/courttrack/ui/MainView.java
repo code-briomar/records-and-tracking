@@ -45,6 +45,8 @@ public class MainView {
     private final List<Button> navButtons = new ArrayList<>();
     private Button activeButton;
     private String currentPage = "dashboard";
+    private String previousPage = "dashboard";
+    private boolean showingDetail = false;
     private final ThemeManager tm = ThemeManager.getInstance();
     private boolean sidebarCollapsed = false;
     private VBox sidebar;
@@ -570,6 +572,11 @@ public class MainView {
     }
 
     private void navigateTo(String page) {
+        if (showingDetail) {
+            exitDetailAndNavigate(page);
+            return;
+        }
+
         if (cachedDashboard == null) {
             cachedDashboard = new DashboardView(
                     () -> navigateTo("cases"),
@@ -619,7 +626,32 @@ public class MainView {
         }
 
         currentPage = page;
+        previousPage = page;
         updateNavHighlight(page);
+    }
+
+    private void exitDetailAndNavigate(String targetPage) {
+        if (!contentArea.getChildren().isEmpty()) {
+            contentArea.getChildren().remove(contentArea.getChildren().size() - 1);
+        }
+        showingDetail = false;
+        previousPage = targetPage;
+        navigateTo(targetPage);
+    }
+
+    private void hideCurrentCachedView() {
+        if (cachedDashboard != null) {
+            cachedDashboard.getRoot().setVisible(false);
+            cachedDashboard.getRoot().setManaged(false);
+        }
+        if (cachedCases != null) {
+            cachedCases.getRoot().setVisible(false);
+            cachedCases.getRoot().setManaged(false);
+        }
+        if (cachedOffenders != null) {
+            cachedOffenders.getRoot().setVisible(false);
+            cachedOffenders.getRoot().setManaged(false);
+        }
     }
 
     private void updateNavHighlight(String page) {
@@ -643,15 +675,25 @@ public class MainView {
     }
 
     public void showCaseDetail(CourtCase courtCase) {
-        contentArea.getChildren().clear();
-        CaseDetailView detailView = new CaseDetailView(courtCase, () -> navigateTo("cases"));
+        hideCurrentCachedView();
+        showingDetail = true;
+        CaseDetailView detailView = new CaseDetailView(courtCase, this::onBack);
         contentArea.getChildren().add(detailView.getRoot());
     }
 
     public void showPersonDetail(Person person) {
-        contentArea.getChildren().clear();
-        PersonDetailView detailView = new PersonDetailView(person, () -> navigateTo("offenders"));
+        hideCurrentCachedView();
+        showingDetail = true;
+        PersonDetailView detailView = new PersonDetailView(person, this::onBack);
         contentArea.getChildren().add(detailView.getRoot());
+    }
+
+    private void onBack() {
+        if (!contentArea.getChildren().isEmpty()) {
+            contentArea.getChildren().remove(contentArea.getChildren().size() - 1);
+        }
+        showingDetail = false;
+        navigateTo(previousPage);
     }
 
     public Parent getRoot() {
