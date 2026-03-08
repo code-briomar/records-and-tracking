@@ -219,6 +219,18 @@ public class OffenderListView {
         TableView<Person> tv = new TableView<>();
         tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
 
+        TableColumn<Person, Number> numCol = new TableColumn<>("No.");
+        numCol.setPrefWidth(45);
+        numCol.setSortable(false);
+        numCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Number item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : String.valueOf((currentPage * pageSize) + getIndex() + 1));
+            }
+        });
+        tv.getColumns().add(0, numCol);
+
         TableColumn<Person, String> nameCol = new TableColumn<>("Name");
         nameCol.setCellValueFactory(new PropertyValueFactory<>("fullName"));
 

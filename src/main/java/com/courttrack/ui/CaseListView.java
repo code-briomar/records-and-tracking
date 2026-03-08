@@ -225,6 +225,18 @@ public class CaseListView {
         tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         tv.setFixedCellSize(52);
 
+        TableColumn<CourtCase, Number> numCol = new TableColumn<>("No.");
+        numCol.setPrefWidth(45);
+        numCol.setSortable(false);
+        numCol.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Number item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty ? null : String.valueOf((currentPage * pageSize) + getIndex() + 1));
+            }
+        });
+        tv.getColumns().add(0, numCol);
+
         // Case (number + title stacked)
         TableColumn<CourtCase, String> caseCol = new TableColumn<>("Case");
         caseCol.setPrefWidth(240);
