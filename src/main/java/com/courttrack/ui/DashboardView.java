@@ -226,7 +226,6 @@ public class DashboardView {
     private TableView<CourtCase> createRecentCasesTable() {
         TableView<CourtCase> table = new TableView<>();
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
-        table.setFixedCellSize(52);
 
         TableColumn<CourtCase, Number> numCol = new TableColumn<>("No.");
         numCol.setPrefWidth(45);
@@ -240,46 +239,59 @@ public class DashboardView {
         });
         table.getColumns().add(0, numCol);
 
-        // Case (number + title stacked)
+        // Case (number + title stacked) - simplified
         TableColumn<CourtCase, String> caseCol = new TableColumn<>("Case");
         caseCol.setPrefWidth(220);
-        caseCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getCaseNumber()));
+        caseCol.setCellValueFactory(cd -> {
+            CourtCase c = cd.getValue();
+            String text = c.getCaseNumber();
+            if (c.getCaseTitle() != null && !c.getCaseTitle().isBlank()) {
+                text = text + "\n" + c.getCaseTitle();
+            }
+            return new SimpleStringProperty(text);
+        });
         caseCol.setCellFactory(col -> new TableCell<>() {
             @Override
-            protected void updateItem(String num, boolean empty) {
-                super.updateItem(num, empty);
-                if (empty || num == null) {
+            protected void updateItem(String text, boolean empty) {
+                super.updateItem(text, empty);
+                if (empty || text == null) {
+                    setText(null);
                     setGraphic(null);
                 } else {
-                    CourtCase c = getTableView().getItems().get(getIndex());
-                    VBox box = new VBox(1);
-                    box.setPadding(new Insets(4, 0, 4, 0));
-                    Label numLabel = new Label(num);
+                    String[] parts = text.split("\n", 2);
+                    VBox box = new VBox(0);
+                    Label numLabel = new Label(parts[0]);
                     numLabel.setFont(Font.font("System", FontWeight.MEDIUM, 13));
                     box.getChildren().add(numLabel);
-                    if (c.getCaseTitle() != null && !c.getCaseTitle().isBlank()) {
-                        Label titleLabel = new Label(c.getCaseTitle());
+                    if (parts.length > 1 && !parts[1].isBlank()) {
+                        Label titleLabel = new Label(parts[1]);
                         titleLabel.setFont(Font.font("System", 11));
                         titleLabel.getStyleClass().add("text-muted");
                         box.getChildren().add(titleLabel);
                     }
                     setGraphic(box);
+                    setText(null);
                 }
-                setText(null);
             }
         });
 
+        // Category badge - simplified with reused label
         TableColumn<CourtCase, String> catCol = new TableColumn<>("Category");
         catCol.setPrefWidth(100);
-        catCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getCaseCategory()));
+        catCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getCaseCategory() != null ? cd.getValue().getCaseCategory() : ""));
         catCol.setCellFactory(col -> new TableCell<>() {
+            private final Label badge = new Label();
+            {
+                badge.setPadding(new Insets(2, 8, 2, 8));
+                badge.setFont(Font.font("System", 11));
+            }
             @Override
             protected void updateItem(String cat, boolean empty) {
                 super.updateItem(cat, empty);
-                if (empty || cat == null) { setGraphic(null); } else {
-                    Label badge = new Label(cat);
-                    badge.setPadding(new Insets(3, 10, 3, 10));
-                    badge.setFont(Font.font("System", 11));
+                if (empty || cat == null || cat.isBlank()) {
+                    setGraphic(null);
+                } else {
+                    badge.setText(cat);
                     String color = switch (cat) { case "Criminal" -> tm.badgeCriminalText(); case "Traffic" -> tm.badgeTrafficText(); case "Civil" -> tm.badgeCivilText(); default -> "#888"; };
                     String bg = switch (cat) { case "Criminal" -> tm.badgeCriminalBg(); case "Traffic" -> tm.badgeTrafficBg(); case "Civil" -> tm.badgeCivilBg(); default -> "#eee"; };
                     badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", bg, color));
@@ -289,28 +301,31 @@ public class DashboardView {
             }
         });
 
+        // Status badge - simplified with reused label
         TableColumn<CourtCase, String> statusCol = new TableColumn<>("Status");
         statusCol.setPrefWidth(90);
-        statusCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getCaseStatus()));
+        statusCol.setCellValueFactory(cd -> new SimpleStringProperty(cd.getValue().getCaseStatus() != null ? cd.getValue().getCaseStatus() : ""));
         statusCol.setCellFactory(col -> new TableCell<>() {
+            private final Label badge = new Label();
+            {
+                badge.setPadding(new Insets(2, 8, 2, 8));
+                badge.setFont(Font.font("System", 11));
+            }
             @Override
             protected void updateItem(String status, boolean empty) {
                 super.updateItem(status, empty);
-                if (empty || status == null) {
+                if (empty || status == null || status.isBlank()) {
                     setGraphic(null);
-                    setText(null);
                 } else {
-                    Label badge = new Label(status);
-                    badge.setPadding(new Insets(3, 10, 3, 10));
-                    badge.setFont(Font.font("System", 11));
+                    badge.setText(status);
                     if ("OPEN".equals(status)) {
                         badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeOpenBg(), tm.badgeOpenText()));
                     } else {
                         badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", tm.badgeClosedBg(), tm.badgeClosedText()));
                     }
                     setGraphic(badge);
-                    setText(null);
                 }
+                setText(null);
             }
         });
 
