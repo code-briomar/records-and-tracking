@@ -51,6 +51,14 @@ public class App extends Application {
     public void start(Stage stage) {
         this.primaryStage = stage;
 
+        // Debug: Log system info and paths
+        System.out.println("=== CourtTrack Startup Debug ===");
+        System.out.println("OS: " + System.getProperty("os.name"));
+        System.out.println("user.home: " + System.getProperty("user.home"));
+        System.out.println("user.dir: " + System.getProperty("user.dir"));
+        System.out.println("LOCALAPPDATA: " + System.getenv("LOCALAPPDATA"));
+        System.out.println("================================");
+
         try {
             Image icon = new Image(getClass().getResourceAsStream("/icons/app.ico"));
             stage.getIcons().add(icon);

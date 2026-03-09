@@ -8,15 +8,26 @@ import java.util.Properties;
 
 public class VersionPreferences {
 
-    private static final String PREFS_FILE = ".courttrack_version.properties";
+    private static final String PREFS_FILE = "courttrack_version.properties";
     private static VersionPreferences instance;
     private final Properties props = new Properties();
     private final File prefsFile;
 
     private VersionPreferences() {
-        String home = System.getProperty("user.home");
-        prefsFile = new File(home, PREFS_FILE);
+        prefsFile = getPrefsFile();
+        System.out.println("[DEBUG] VersionPreferences: Using prefs file: " + prefsFile.getAbsolutePath());
         load();
+    }
+
+    private static File getPrefsFile() {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("win")) {
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData != null) {
+                return new File(localAppData + "/CourtTrack", PREFS_FILE);
+            }
+        }
+        return new File(System.getProperty("user.home"), "." + PREFS_FILE);
     }
 
     public static VersionPreferences getInstance() {

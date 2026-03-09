@@ -9,13 +9,25 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 public class DatabaseManager {
-    private static final String DB_DIR = System.getProperty("user.home") + "/.courttrack";
+    private static final String DB_DIR = getDataDir();
     private static final String DB_NAME = "court_records";
     private static final String DB_URL = "jdbc:h2:file:" + DB_DIR + "/" + DB_NAME + ";MODE=MySQL;AUTO_SERVER=TRUE";
     private static DatabaseManager instance;
 
+    private static String getDataDir() {
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("win")) {
+            String localAppData = System.getenv("LOCALAPPDATA");
+            if (localAppData != null) {
+                return localAppData + "/CourtTrack";
+            }
+        }
+        return System.getProperty("user.home") + "/.courttrack";
+    }
+
     static {
         try {
+            System.out.println("[DEBUG] DatabaseManager: Using data directory: " + DB_DIR);
             Files.createDirectories(Path.of(DB_DIR));
             Class.forName("org.h2.Driver");
         } catch (Exception e) {
