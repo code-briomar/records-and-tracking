@@ -1,5 +1,14 @@
 # Release Notes
 
+## v0.1.13 - 2026-03-09
+
+### Bug Fixes
+- **Windows MSI login**: Fixed "Account not setup" error on Windows MSI/EXE by using consistent data directory (%LOCALAPPDATA%\CourtTrack)
+- **Database location**: Now uses %LOCALAPPDATA%\CourtTrack\ on Windows for database and preferences
+- **Debug logging**: Added startup logging showing OS, user.home, and data directory paths
+
+---
+
 ## v0.1.12 - 2026-03-09
 
 ### Features

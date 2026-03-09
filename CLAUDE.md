@@ -1,8 +1,8 @@
 # CourtTrack – Claude Session Context
 
 ## Current State
-- Latest release: **v0.1.10** (2026-02-27) — live on GitHub
-- Previous release: v0.1.9 — MSI base for update system test (per-user install)
+- Latest release: **v0.1.13** (2026-03-09) — live on GitHub
+- Previous release: v0.1.12 — pagination caching and performance improvements
 - Update system is fully working: direct JAR and MSI installs on Windows and Linux
 
 ## Recent Work
