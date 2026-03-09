@@ -1,5 +1,25 @@
 # Release Notes
 
+## v0.1.12 - 2026-03-09
+
+### Features
+- **Pagination caching**: Pages are now cached for instant navigation (keeps last 5 pages)
+- **Background preloading**: Next page loads automatically in background when viewing a page
+- **Page size selector**: Choose items per page (5-100) from dropdown
+- **Row numbers**: Added "No." column showing row numbers across all tables
+
+### Bug Fixes
+- **Navigation**: Fixed back button not working after viewing case/person details
+- **Scrolling**: Fixed choppy table scrolling by simplifying cell factories
+- **Placeholders**: Tables now properly show "No cases"/"No offenders" instead of stuck "Loading"
+- **Windows display**: App now starts maximized to fill the screen properly
+
+### Performance
+- Instant case detail view (no unnecessary background refresh)
+- Smoother scrolling on large tables
+
+---
+
 ## v0.1.11 - 2026-03-03
  Fixed
 - CSS styles now apply correctly on app startup (fixed theme loading in auto-login)
