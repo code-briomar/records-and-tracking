@@ -35,6 +35,7 @@ public class CaseListView {
     private final Consumer<CourtCase> onViewDetail;
     private TableView<CourtCase> table;
     private ObservableList<CourtCase> caseList;
+    private Label placeholderLabel;
     private TextField searchField;
     private ComboBox<String> statusFilter;
     private ComboBox<String> categoryFilter;
@@ -87,6 +88,7 @@ public class CaseListView {
         List<CourtCase> cached = pageCache.get(cacheKey);
         if (cached != null) {
             caseList.setAll(cached);
+            updatePlaceholder(query != null && !query.isEmpty() ? "No matching cases found" : "No cases found");
             totalCount = cached.size() < pageSize && currentPage > 0 ? offset + cached.size() : offset + pageSize + (cached.size() == pageSize ? 0 : -1);
             caseRepo.countByStatusAndCategory(status, category, count -> Platform.runLater(() -> {
                 totalCount = count;
@@ -104,6 +106,7 @@ public class CaseListView {
                 Platform.runLater(() -> {
                     caseList.setAll(paged);
                     totalCount = count;
+                    updatePlaceholder(count == 0 ? "No matching cases found" : null);
                     updatePaginationControls();
                 });
                 preloadNextPage();
@@ -115,11 +118,23 @@ public class CaseListView {
                     Platform.runLater(() -> {
                         caseList.setAll(cases);
                         totalCount = count;
+                        updatePlaceholder(count == 0 ? "No cases found" : null);
                         updatePaginationControls();
                     });
                     preloadNextPage();
                 });
             });
+        }
+    }
+
+    private void updatePlaceholder(String message) {
+        if (placeholderLabel != null) {
+            if (message == null) {
+                table.setPlaceholder(null);
+            } else {
+                placeholderLabel.setText(message);
+                table.setPlaceholder(placeholderLabel);
+            }
         }
     }
 
@@ -213,7 +228,8 @@ public class CaseListView {
         table = createTable();
         caseList = FXCollections.observableArrayList();
         table.setItems(caseList);
-        table.setPlaceholder(new Label("Loading..."));
+        placeholderLabel = new Label("Loading...");
+        table.setPlaceholder(placeholderLabel);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         root.getChildren().addAll(titleBox, toolbar, table);

@@ -35,6 +35,7 @@ public class DashboardView {
 
     private HBox statsRow;
     private TableView<CourtCase> recentTable;
+    private Label recentPlaceholderLabel;
     private VBox recentSection;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
@@ -81,6 +82,12 @@ public class DashboardView {
 
             Platform.runLater(() -> {
                 recentTable.getItems().setAll(cases);
+                if (cases.isEmpty()) {
+                    recentPlaceholderLabel.setText("No recent cases");
+                    recentTable.setPlaceholder(recentPlaceholderLabel);
+                } else {
+                    recentTable.setPlaceholder(null);
+                }
             });
         }).start();
     }
@@ -121,7 +128,8 @@ public class DashboardView {
         recentTitle.setFont(Font.font("System", FontWeight.BOLD, 18));
 
         recentTable = createRecentCasesTable();
-        recentTable.setPlaceholder(new Label("Loading..."));
+        recentPlaceholderLabel = new Label("Loading...");
+        recentTable.setPlaceholder(recentPlaceholderLabel);
         VBox.setVgrow(recentTable, Priority.ALWAYS);
 
         root.getChildren().addAll(titleBox, statsRow, actionsTitle, actionsRow, recentTitle, recentTable);

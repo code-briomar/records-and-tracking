@@ -51,6 +51,7 @@ public class OffenderListView {
     private final Consumer<Person> onViewDetail;
     private TableView<Person> table;
     private ObservableList<Person> personList;
+    private Label placeholderLabel;
     private TextField searchField;
     private ComboBox<Integer> pageSizeSelector;
     private Button prevBtn, nextBtn;
@@ -91,6 +92,7 @@ public class OffenderListView {
         List<Person> cached = pageCache.get(cacheKey);
         if (cached != null) {
             personList.setAll(cached);
+            updatePlaceholder(query != null && !query.isEmpty() ? "No matching offenders found" : "No offenders in the system");
             personRepo.countAll(count -> Platform.runLater(() -> {
                 totalCount = count;
                 updatePaginationControls();
@@ -107,6 +109,7 @@ public class OffenderListView {
                 Platform.runLater(() -> {
                     personList.setAll(paged);
                     totalCount = count;
+                    updatePlaceholder(count == 0 ? "No matching offenders found" : null);
                     updatePaginationControls();
                 });
                 preloadNextPage();
@@ -118,11 +121,23 @@ public class OffenderListView {
                     Platform.runLater(() -> {
                         personList.setAll(persons);
                         totalCount = count;
+                        updatePlaceholder(count == 0 ? "No offenders in the system" : null);
                         updatePaginationControls();
                     });
                     preloadNextPage();
                 });
             });
+        }
+    }
+
+    private void updatePlaceholder(String message) {
+        if (placeholderLabel != null) {
+            if (message == null) {
+                table.setPlaceholder(null);
+            } else {
+                placeholderLabel.setText(message);
+                table.setPlaceholder(placeholderLabel);
+            }
         }
     }
 
@@ -208,7 +223,8 @@ public class OffenderListView {
         table = createTable();
         personList = FXCollections.observableArrayList();
         table.setItems(personList);
-        table.setPlaceholder(new Label("Loading..."));
+        placeholderLabel = new Label("Loading...");
+        table.setPlaceholder(placeholderLabel);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         root.getChildren().addAll(titleBox, toolbar, table);
