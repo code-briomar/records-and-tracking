@@ -51,7 +51,6 @@ public class App extends Application {
     public void start(Stage stage) {
         this.primaryStage = stage;
 
-        // Set window/taskbar icon
         try {
             Image icon = new Image(getClass().getResourceAsStream("/icons/app.ico"));
             stage.getIcons().add(icon);
@@ -59,29 +58,22 @@ public class App extends Application {
             System.err.println("Could not load app icon: " + e.getMessage());
         }
 
-        // Initialize database
         DatabaseManager.getInstance().initialize();
-
-        prefs = VersionPreferences.getInstance();
-        // Try auto-login with saved session
-        if (prefs.hasSession()) {
-            if (tryAutoLogin()) {
-                primaryStage.show();
-                return; // Already showed main view
-            }
-        }
-
-        // Apply AtlantaFX theme before showing any UI
         ThemeManager.getInstance().applyTheme();
 
-        showLogin();
+        prefs = VersionPreferences.getInstance();
 
         stage.setTitle("Records & Tracking System");
         stage.setMinWidth(1000);
         stage.setMinHeight(650);
-        stage.setWidth(1200);
-        stage.setHeight(800);
-        stage.centerOnScreen();
+        stage.setMaximized(true);  // Set BEFORE show()
+
+        if (prefs.hasSession() && tryAutoLogin()) {
+            stage.show();
+            return;
+        }
+
+        showLogin();
         stage.show();
     }
 
