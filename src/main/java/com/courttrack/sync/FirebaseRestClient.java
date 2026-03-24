@@ -317,8 +317,10 @@ public class FirebaseRestClient {
     }
 
     private void patch(String url, String body, String token) throws IOException {
+        // HttpURLConnection does not support PATCH; use POST with X-HTTP-Method-Override
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setRequestMethod("PATCH");
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("X-HTTP-Method-Override", "PATCH");
         conn.setRequestProperty("Content-Type", "application/json");
         if (token != null) conn.setRequestProperty("Authorization", "Bearer " + token);
         conn.setDoOutput(true);

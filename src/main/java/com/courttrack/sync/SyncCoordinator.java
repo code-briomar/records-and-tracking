@@ -95,8 +95,10 @@ public class SyncCoordinator {
 
         // Offline check
         if (!isOnline()) {
-            LOGGER.warning("No internet connection — sync skipped");
-            SyncStatus.getInstance().set(SyncStatus.State.OFFLINE, "Offline");
+            int pending = countPendingLocal();
+            String offlineMsg = pending > 0 ? "Offline · " + pending + " pending" : "Offline";
+            LOGGER.warning("No internet connection — sync skipped (" + pending + " pending)");
+            SyncStatus.getInstance().set(SyncStatus.State.OFFLINE, offlineMsg);
             return;
         }
 
@@ -153,6 +155,15 @@ public class SyncCoordinator {
             return true;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private int countPendingLocal() {
+        try (Connection conn = DatabaseManager.getInstance().getConnection()) {
+            return countQuery(conn, "SELECT COUNT(*) FROM court_case WHERE is_new = TRUE OR has_changes = TRUE OR is_deleted = TRUE")
+                 + countQuery(conn, "SELECT COUNT(*) FROM person WHERE is_new = TRUE OR has_changes = TRUE OR is_deleted = TRUE");
+        } catch (Exception e) {
+            return 0;
         }
     }
 
@@ -265,19 +276,21 @@ public class SyncCoordinator {
             for (Person person : unsyncedPersons) {
                 try {
                     LOGGER.info("Pushing person to Firestore: " + person.getPersonId() + " - " + person.getFullName());
-                    
+
+                    long pushTime = System.currentTimeMillis();
                     Map<String, Object> data = buildPersonMap(person);
+                    data.put("updatedAt", pushTime);
 
                     // Push to Firestore
                     FirestoreContext.pushOffender(person.getPersonId(), data);
-                    
-                    // Update local sync flags
+
+                    // Update local sync flags using the SAME timestamp sent to Firestore
                     person.setNew(false);
                     person.setHasChanges(false);
                     person.setVersion(person.getVersion() + 1);
                     person.setLastSyncedAt(LocalDateTime.now());
-                    updatePerson(conn, person);
-                    
+                    updatePerson(conn, person, pushTime);
+
                     LOGGER.info("Successfully pushed person: " + person.getPersonId());
                 } catch (Exception e) {
                     LOGGER.log(Level.SEVERE, "Failed to push person: " + person.getPersonId(), e);
@@ -311,20 +324,22 @@ public class SyncCoordinator {
             for (CourtCase caseItem : unsyncedCases) {
                 try {
                     LOGGER.info("Pushing case to Firestore: " + caseItem.getCaseId() + " - " + caseItem.getCaseNumber());
-                    
+
+                    long pushTime = System.currentTimeMillis();
                     Map<String, Object> data = buildCaseMap(caseItem);
-                    
+                    data.put("updatedAt", pushTime);
+
                     // Push to Firestore using caseId as document ID (caseNumber may contain invalid chars like /)
                     String docId = caseItem.getCaseId();
                     FirestoreContext.pushCase(docId, data);
-                    
-                    // Update local sync flags
+
+                    // Update local sync flags using the SAME timestamp sent to Firestore
                     caseItem.setNew(false);
                     caseItem.setHasChanges(false);
                     caseItem.setVersion(caseItem.getVersion() + 1);
                     caseItem.setLastSyncedAt(LocalDateTime.now());
-                    updateCase(conn, caseItem);
-                    
+                    updateCase(conn, caseItem, pushTime);
+
                     LOGGER.info("Successfully pushed case: " + caseItem.getCaseId());
                 } catch (Exception e) {
                     LOGGER.log(Level.SEVERE, "Failed to push case: " + caseItem.getCaseId(), e);
@@ -505,23 +520,24 @@ public class SyncCoordinator {
 
             Object updatedAtVal = remoteData.get("updatedAt") != null ? remoteData.get("updatedAt") : remoteData.get("UpdatedAt");
             Long remoteUpdatedAt = extractUpdatedAt(updatedAtVal);
-            Long localUpdatedAt = localPerson != null && localPerson.getUpdatedAt() != null 
-                ? localPerson.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000 
+            Long localUpdatedAt = localPerson != null && localPerson.getUpdatedAt() != null
+                ? localPerson.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 : null;
-            
+
             boolean isDeleted = Boolean.TRUE.equals(remoteData.get("isDeleted"));
-            
+
             LOGGER.info("Processing person " + personId + ": localPerson=" + (localPerson != null) + ", remoteUpdatedAt=" + remoteUpdatedAt + ", localUpdatedAt=" + localUpdatedAt);
-            
+
             if (localPerson == null) {
                 // New person from remote - insert
                 if (!isDeleted) {
                     Person newPerson = mapRemoteDataToPerson(remoteData, personId);
-                    insertPerson(conn, newPerson);
+                    long remoteTs = remoteUpdatedAt != null ? remoteUpdatedAt : System.currentTimeMillis();
+                    insertPerson(conn, newPerson, remoteTs);
                     LOGGER.info("Inserted new person from remote: " + personId);
                 }
-            } else if (remoteUpdatedAt != null && (localUpdatedAt == null || remoteUpdatedAt >= localUpdatedAt)) {
-                // Remote is newer or equal, or local has no timestamp - update local
+            } else if (remoteUpdatedAt != null && (localUpdatedAt == null || remoteUpdatedAt > localUpdatedAt)) {
+                // Remote is strictly newer - update local with remote's exact timestamp
                 if (isDeleted) {
                     deletePerson(conn, personId);
                     LOGGER.info("Deleted person from remote: " + personId);
@@ -529,12 +545,12 @@ public class SyncCoordinator {
                     Person updatedPerson = mapRemoteDataToPerson(remoteData, personId);
                     updatedPerson.setNew(false);
                     updatedPerson.setHasChanges(false);
-                    updatePersonFull(conn, updatedPerson);
+                    updatePersonFull(conn, updatedPerson, remoteUpdatedAt);
                     LOGGER.info("Updated person from remote: " + personId);
                 }
             } else {
-                // Local is newer - will be pushed to Firestore
-                LOGGER.info("Person " + personId + " local is newer, will push to Firestore");
+                // Local is newer or equal - no action needed
+                LOGGER.info("Person " + personId + " local is up-to-date (local=" + localUpdatedAt + ", remote=" + remoteUpdatedAt + ")");
             }
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Failed to process remote person: " + personId, e);
@@ -557,21 +573,38 @@ public class SyncCoordinator {
 
             Object updatedAtVal = remoteData.get("updatedAt") != null ? remoteData.get("updatedAt") : remoteData.get("UpdatedAt");
             Long remoteUpdatedAt = extractUpdatedAt(updatedAtVal);
-            Long localUpdatedAt = localCase != null && localCase.getUpdatedAt() != null 
-                ? localCase.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toEpochSecond() * 1000 
+            Long localUpdatedAt = localCase != null && localCase.getUpdatedAt() != null
+                ? localCase.getUpdatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
                 : null;
-            
+
             boolean isDeleted = Boolean.TRUE.equals(remoteData.get("isDeleted"));
-            
+
             if (localCase == null) {
-                // New case from remote - insert
+                // New case from remote - insert (may fail if a different local case shares the same case_number)
                 if (!isDeleted) {
                     CourtCase newCase = mapRemoteDataToCase(remoteData, caseId);
-                    insertCase(conn, newCase);
-                    LOGGER.info("Inserted new case from remote: " + caseId);
+                    long remoteTs = remoteUpdatedAt != null ? remoteUpdatedAt : System.currentTimeMillis();
+                    try {
+                        insertCase(conn, newCase, remoteTs);
+                        LOGGER.info("Inserted new case from remote: " + caseId);
+                    } catch (org.h2.jdbc.JdbcSQLIntegrityConstraintViolationException dup) {
+                        // Another local case already has this case_number — merge into it
+                        CourtCase existing = getCaseByNumber(conn, newCase.getCaseNumber());
+                        if (existing != null) {
+                            newCase.setCaseId(existing.getCaseId());
+                            newCase.setNew(false);
+                            newCase.setHasChanges(false);
+                            updateCaseFull(conn, newCase, remoteTs);
+                            LOGGER.info("Merged duplicate case_number '" + newCase.getCaseNumber()
+                                + "' from remote " + caseId + " into local " + existing.getCaseId());
+                        } else {
+                            LOGGER.warning("Could not resolve duplicate for case_number '"
+                                + newCase.getCaseNumber() + "' (remote id: " + caseId + ")");
+                        }
+                    }
                 }
-            } else if (remoteUpdatedAt != null && (localUpdatedAt == null || remoteUpdatedAt >= localUpdatedAt)) {
-                // Remote is newer or equal, or local has no timestamp - update local
+            } else if (remoteUpdatedAt != null && (localUpdatedAt == null || remoteUpdatedAt > localUpdatedAt)) {
+                // Remote is strictly newer - update local with remote's exact timestamp
                 if (isDeleted) {
                     deleteCase(conn, caseId);
                     LOGGER.info("Deleted case from remote: " + caseId);
@@ -579,12 +612,12 @@ public class SyncCoordinator {
                     CourtCase updatedCase = mapRemoteDataToCase(remoteData, caseId);
                     updatedCase.setNew(false);
                     updatedCase.setHasChanges(false);
-                    updateCaseFull(conn, updatedCase);
+                    updateCaseFull(conn, updatedCase, remoteUpdatedAt);
                     LOGGER.info("Updated case from remote: " + caseId);
                 }
             } else {
-                // Local is newer - will be pushed to Firestore
-                LOGGER.info("Case " + caseId + " local is newer, will push to Firestore");
+                // Local is newer or equal - no action needed
+                LOGGER.info("Case " + caseId + " local is up-to-date (local=" + localUpdatedAt + ", remote=" + remoteUpdatedAt + ")");
             }
         } catch (SQLException e) {
             LOGGER.log(Level.SEVERE, "Failed to process remote case: " + caseId, e);
@@ -595,9 +628,15 @@ public class SyncCoordinator {
         if (updatedAt == null) return null;
         if (updatedAt instanceof Number) return ((Number) updatedAt).longValue();
         if (updatedAt instanceof String) {
+            String s = (String) updatedAt;
             try {
-                return Long.parseLong((String) updatedAt);
+                return Long.parseLong(s);
             } catch (NumberFormatException e) {
+                // Fall through to ISO-8601 parse
+            }
+            try {
+                return java.time.Instant.parse(s).toEpochMilli();
+            } catch (Exception e) {
                 return null;
             }
         }
@@ -686,8 +725,9 @@ public class SyncCoordinator {
         return map;
     }
 
-    private void updatePerson(Connection conn, Person person) throws SQLException {
-        String sql = "UPDATE person SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?";
+    private void updatePerson(Connection conn, Person person, long updatedAtMs) throws SQLException {
+        java.sql.Timestamp ts = new java.sql.Timestamp(updatedAtMs);
+        String sql = "UPDATE person SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = ? WHERE person_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setBoolean(1, person.isNew());
             ps.setBoolean(2, person.hasChanges());
@@ -696,13 +736,21 @@ public class SyncCoordinator {
             ps.setInt(5, person.getSyncRetryCount());
             ps.setString(6, person.getNextRetryAt() != null ? person.getNextRetryAt().toString() : null);
             ps.setString(7, person.getLastSyncError());
-            ps.setString(8, person.getPersonId());
+            ps.setTimestamp(8, ts);
+            ps.setString(9, person.getPersonId());
             ps.executeUpdate();
         }
     }
 
-    private void updateCase(Connection conn, CourtCase courtCase) throws SQLException {
-        String sql = "UPDATE court_case SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
+    /** Overload used for non-push updates (retries, pull-triggered saves). */
+    private void updatePerson(Connection conn, Person person) throws SQLException {
+        updatePerson(conn, person, System.currentTimeMillis());
+    }
+
+    private void updateCase(Connection conn, CourtCase courtCase, long updatedAtMs) throws SQLException {
+        // Use the exact timestamp sent to Firestore so local and remote stay in sync
+        java.sql.Timestamp ts = new java.sql.Timestamp(updatedAtMs);
+        String sql = "UPDATE court_case SET is_new = ?, has_changes = ?, version = ?, last_synced_at = ?, sync_retry_count = ?, next_retry_at = ?, last_sync_error = ?, updated_at = ? WHERE case_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setBoolean(1, courtCase.isNew());
             ps.setBoolean(2, courtCase.hasChanges());
@@ -711,9 +759,15 @@ public class SyncCoordinator {
             ps.setInt(5, courtCase.getSyncRetryCount());
             ps.setString(6, courtCase.getNextRetryAt() != null ? courtCase.getNextRetryAt().toString() : null);
             ps.setString(7, courtCase.getLastSyncError());
-            ps.setString(8, courtCase.getCaseId());
+            ps.setTimestamp(8, ts);
+            ps.setString(9, courtCase.getCaseId());
             ps.executeUpdate();
         }
+    }
+
+    /** Overload used for non-push updates (retries, pull-triggered saves). */
+    private void updateCase(Connection conn, CourtCase courtCase) throws SQLException {
+        updateCase(conn, courtCase, System.currentTimeMillis());
     }
 
     private Person mapRemoteDataToPerson(Map<String, Object> data, String personId) {
@@ -818,8 +872,8 @@ public class SyncCoordinator {
         return null;
     }
 
-    private void insertPerson(Connection conn, Person person) throws SQLException {
-        String sql = "INSERT INTO person (person_id, national_id, first_name, last_name, other_names, gender, phone_number, email, alias, nationality, marital_status, occupation, address, first_offender, criminal_history, known_associates, arresting_officer, place_of_arrest, penalty, notes, eye_color, hair_color, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship, legal_representation, medical_conditions, risk_level, distinguishing_marks, type, status, facility, offense_type, is_deleted, is_new, has_changes, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    private void insertPerson(Connection conn, Person person, long updatedAtMs) throws SQLException {
+        String sql = "INSERT INTO person (person_id, national_id, first_name, last_name, other_names, gender, phone_number, email, alias, nationality, marital_status, occupation, address, first_offender, criminal_history, known_associates, arresting_officer, place_of_arrest, penalty, notes, eye_color, hair_color, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship, legal_representation, medical_conditions, risk_level, distinguishing_marks, type, status, facility, offense_type, is_deleted, is_new, has_changes, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, person.getPersonId());
             ps.setString(2, person.getNationalId());
@@ -858,12 +912,13 @@ public class SyncCoordinator {
             ps.setBoolean(35, person.isNew());
             ps.setBoolean(36, person.hasChanges());
             ps.setInt(37, person.getVersion());
+            ps.setTimestamp(38, new java.sql.Timestamp(updatedAtMs));
             ps.executeUpdate();
         }
     }
 
-    private void updatePersonFull(Connection conn, Person person) throws SQLException {
-        String sql = "UPDATE person SET national_id = ?, first_name = ?, last_name = ?, other_names = ?, gender = ?, phone_number = ?, email = ?, alias = ?, nationality = ?, marital_status = ?, occupation = ?, address = ?, first_offender = ?, criminal_history = ?, known_associates = ?, arresting_officer = ?, place_of_arrest = ?, penalty = ?, notes = ?, eye_color = ?, hair_color = ?, emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?, legal_representation = ?, medical_conditions = ?, risk_level = ?, distinguishing_marks = ?, type = ?, status = ?, facility = ?, offense_type = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?";
+    private void updatePersonFull(Connection conn, Person person, long updatedAtMs) throws SQLException {
+        String sql = "UPDATE person SET national_id = ?, first_name = ?, last_name = ?, other_names = ?, gender = ?, phone_number = ?, email = ?, alias = ?, nationality = ?, marital_status = ?, occupation = ?, address = ?, first_offender = ?, criminal_history = ?, known_associates = ?, arresting_officer = ?, place_of_arrest = ?, penalty = ?, notes = ?, eye_color = ?, hair_color = ?, emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?, legal_representation = ?, medical_conditions = ?, risk_level = ?, distinguishing_marks = ?, type = ?, status = ?, facility = ?, offense_type = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = ? WHERE person_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, person.getNationalId());
             ps.setString(2, person.getFirstName());
@@ -901,7 +956,8 @@ public class SyncCoordinator {
             ps.setBoolean(34, person.isNew());
             ps.setBoolean(35, person.hasChanges());
             ps.setInt(36, person.getVersion());
-            ps.setString(37, person.getPersonId());
+            ps.setTimestamp(37, new java.sql.Timestamp(updatedAtMs));
+            ps.setString(38, person.getPersonId());
             ps.executeUpdate();
         }
     }
@@ -914,8 +970,8 @@ public class SyncCoordinator {
         }
     }
 
-    private void insertCase(Connection conn, CourtCase courtCase) throws SQLException {
-        String sql = "INSERT INTO court_case (case_id, case_number, case_title, court_id, court_name, filing_date, case_status, case_category, case_type, priority, description, sentence, mitigation_notes, prosecution_counsel, appeal_status, location_of_offence, evidence_summary, hearing_dates, court_assistant, is_deleted, is_new, has_changes, version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    private void insertCase(Connection conn, CourtCase courtCase, long updatedAtMs) throws SQLException {
+        String sql = "INSERT INTO court_case (case_id, case_number, case_title, court_id, court_name, filing_date, case_status, case_category, case_type, priority, description, sentence, mitigation_notes, prosecution_counsel, appeal_status, location_of_offence, evidence_summary, hearing_dates, court_assistant, is_deleted, is_new, has_changes, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, courtCase.getCaseId());
             ps.setString(2, courtCase.getCaseNumber());
@@ -940,12 +996,13 @@ public class SyncCoordinator {
             ps.setBoolean(21, courtCase.isNew());
             ps.setBoolean(22, courtCase.hasChanges());
             ps.setInt(23, courtCase.getVersion());
+            ps.setTimestamp(24, new java.sql.Timestamp(updatedAtMs));
             ps.executeUpdate();
         }
     }
 
-    private void updateCaseFull(Connection conn, CourtCase courtCase) throws SQLException {
-        String sql = "UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, court_name = ?, case_status = ?, case_category = ?, case_type = ?, priority = ?, description = ?, sentence = ?, mitigation_notes = ?, prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?, evidence_summary = ?, hearing_dates = ?, court_assistant = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
+    private void updateCaseFull(Connection conn, CourtCase courtCase, long updatedAtMs) throws SQLException {
+        String sql = "UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, court_name = ?, case_status = ?, case_category = ?, case_type = ?, priority = ?, description = ?, sentence = ?, mitigation_notes = ?, prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?, evidence_summary = ?, hearing_dates = ?, court_assistant = ?, is_deleted = ?, is_new = ?, has_changes = ?, version = ?, updated_at = ? WHERE case_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, courtCase.getCaseNumber());
             ps.setString(2, courtCase.getCaseTitle());
@@ -968,7 +1025,8 @@ public class SyncCoordinator {
             ps.setBoolean(19, courtCase.isNew());
             ps.setBoolean(20, courtCase.hasChanges());
             ps.setInt(21, courtCase.getVersion());
-            ps.setString(22, courtCase.getCaseId());
+            ps.setTimestamp(22, new java.sql.Timestamp(updatedAtMs));
+            ps.setString(23, courtCase.getCaseId());
             ps.executeUpdate();
         }
     }
@@ -1163,6 +1221,17 @@ public class SyncCoordinator {
         String sql = "SELECT * FROM court_case WHERE case_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, caseId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return mapResultSetToCourtCase(rs);
+            }
+        }
+        return null;
+    }
+
+    private CourtCase getCaseByNumber(Connection conn, String caseNumber) throws SQLException {
+        String sql = "SELECT * FROM court_case WHERE case_number = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, caseNumber);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) return mapResultSetToCourtCase(rs);
             }
