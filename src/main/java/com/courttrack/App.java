@@ -16,6 +16,10 @@ import java.util.Properties;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 import com.courttrack.db.DatabaseManager;
 import com.courttrack.sync.CourtContext;
@@ -39,6 +43,7 @@ import javafx.stage.Stage;
 
 public class App extends Application {
 
+    private static final Logger LOGGER = Logger.getLogger(App.class.getName());
     private Stage primaryStage;
     private LoginView loginView;
     private MainView mainView;
@@ -47,8 +52,26 @@ public class App extends Application {
 
     private ScheduledExecutorService updateChecker;
 
+    private void setupFileLogging() {
+        try {
+            Path logDir = Path.of(System.getProperty("user.home"), ".courttrack", "logs");
+            Files.createDirectories(logDir);
+            String logPattern = logDir.resolve("app.log").toString();
+            // 5 MB per file, up to 3 rotating files
+            FileHandler fileHandler = new FileHandler(logPattern, 5 * 1024 * 1024, 3, true);
+            fileHandler.setFormatter(new SimpleFormatter());
+            fileHandler.setLevel(Level.ALL);
+            Logger rootLogger = Logger.getLogger("");
+            rootLogger.addHandler(fileHandler);
+            rootLogger.setLevel(Level.INFO);
+        } catch (Exception e) {
+            System.err.println("Could not set up file logging: " + e.getMessage());
+        }
+    }
+
     @Override
     public void start(Stage stage) {
+        setupFileLogging();
         this.primaryStage = stage;
 
         // Debug: Log system info and paths
@@ -173,6 +196,7 @@ public class App extends Application {
                     Scene scene = new Scene(mainView.getRoot(), 1200, 800);
                     addSupplementalCss(scene);
                     primaryStage.setScene(scene);
+                    mainView.registerKeyShortcuts(scene);
                     if (isOnline) {
                         checkAndShowReleaseNotes();
                         scheduleUpdateCheck();
@@ -226,12 +250,26 @@ public class App extends Application {
         Scene scene = new Scene(mainView.getRoot(), 1200, 800);
         addSupplementalCss(scene);
         primaryStage.setScene(scene);
+        mainView.registerKeyShortcuts(scene);
         if (isOnline) {
             checkAndShowReleaseNotes();
             scheduleUpdateCheck();
         }
 
         startConnectivityChecker();
+
+        // Trigger sync in background (same as onLoginAttempt) so status transitions from "Connected" → "Synced"
+        if (isOnline) {
+            new Thread(() -> {
+                try {
+                    Thread.sleep(2000);
+                    SyncCoordinator.getInstance().syncAll();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }, "auto-login-sync").start();
+        }
+
         return true;
     }
 
@@ -413,10 +451,15 @@ public class App extends Application {
 
     @Override
     public void stop() {
+        LOGGER.info("Application shutting down...");
         stopConnectivityChecker();
         if (updateChecker != null) {
             updateChecker.shutdownNow();
         }
+        // Shutdown repository executor services
+        com.courttrack.repository.CaseRepository.getInstance().shutdown();
+        com.courttrack.repository.PersonRepository.getInstance().shutdown();
+        LOGGER.info("Application shutdown complete.");
     }
 
     public static void main(String[] args) {

@@ -7,8 +7,10 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Logger;
 
 public class PersonDao {
+    private static final Logger LOGGER = Logger.getLogger(PersonDao.class.getName());
     private final DatabaseManager db = DatabaseManager.getInstance();
 
     public List<Person> findAll() {
@@ -21,7 +23,7 @@ public class PersonDao {
                 list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
         return list;
     }
@@ -38,7 +40,7 @@ public class PersonDao {
                 list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
         return list;
     }
@@ -51,7 +53,7 @@ public class PersonDao {
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return mapRow(rs);
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
         return null;
     }
@@ -75,7 +77,7 @@ public class PersonDao {
                 list.add(mapRow(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
         return list;
     }
@@ -99,7 +101,7 @@ public class PersonDao {
             ps.setString(10, p.getPhotoLocalUri());
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
     }
 
@@ -124,7 +126,7 @@ public class PersonDao {
             ps.setString(10, p.getPersonId());
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
     }
 
@@ -135,7 +137,7 @@ public class PersonDao {
             ps.setString(1, personId);
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
     }
 
@@ -147,7 +149,7 @@ public class PersonDao {
             rs.next();
             return rs.getInt(1);
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error in findAll: " + e.getMessage());
         }
         return 0;
     }

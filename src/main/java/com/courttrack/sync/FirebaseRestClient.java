@@ -64,6 +64,10 @@ public class FirebaseRestClient {
         return idToken != null;
     }
 
+    public void ensureAuthenticated() throws IOException {
+        refreshIfNeeded();
+    }
+
     private void refreshIfNeeded() throws IOException {
         if (idToken == null) {
             signInAnonymously();

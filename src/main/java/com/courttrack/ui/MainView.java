@@ -2,12 +2,20 @@ package com.courttrack.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
+import com.courttrack.dao.CaseDao;
+import com.courttrack.dao.PersonDao;
+import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
+import com.courttrack.repository.CaseRepository;
+
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import com.courttrack.sync.SyncStatus;
 import com.courttrack.update.UpdateInfo;
 import com.courttrack.util.VersionPreferences;
@@ -25,6 +33,8 @@ import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.ColumnConstraints;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -420,7 +430,7 @@ public class MainView {
 
         VBox content = new VBox(16);
         content.setPadding(new Insets(20, 28, 12, 28));
-        content.setPrefWidth(400);
+        content.setPrefWidth(460);
 
         // Header
         FontIcon settingsIcon = new FontIcon(Feather.SETTINGS);
@@ -485,11 +495,56 @@ public class MainView {
         sidebarRow.setAlignment(Pos.CENTER_LEFT);
         sidebarRow.setPadding(new Insets(8, 0, 8, 0));
 
-        content.getChildren().addAll(header, sep, themeRow, new Separator(), sidebarRow);
+        // Keyboard Shortcuts
+        FontIcon kbIcon = new FontIcon(Feather.COMMAND);
+        kbIcon.setIconSize(16);
+        kbIcon.setIconColor(Color.web(tm.accentBlue()));
+        Label kbTitle = new Label("Keyboard Shortcuts");
+        kbTitle.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+        HBox kbHeader = new HBox(10, kbIcon, kbTitle);
+        kbHeader.setAlignment(Pos.CENTER_LEFT);
+        kbHeader.setPadding(new Insets(4, 0, 4, 0));
+
+        GridPane shortcutsGrid = new GridPane();
+        shortcutsGrid.setHgap(20);
+        shortcutsGrid.setVgap(7);
+        shortcutsGrid.setPadding(new Insets(4, 0, 4, 26));
+        ColumnConstraints kbKeyCol = new ColumnConstraints();
+        kbKeyCol.setMinWidth(160);
+        ColumnConstraints kbActCol = new ColumnConstraints();
+        kbActCol.setHgrow(Priority.ALWAYS);
+        shortcutsGrid.getColumnConstraints().addAll(kbKeyCol, kbActCol);
+
+        addShortcutRow(shortcutsGrid, 0, "Ctrl + N", "New Case");
+        addShortcutRow(shortcutsGrid, 1, "Ctrl + Shift + N", "New Person");
+        addShortcutRow(shortcutsGrid, 2, "Ctrl + 1", "Go to Dashboard");
+        addShortcutRow(shortcutsGrid, 3, "Ctrl + 2", "Go to Cases");
+        addShortcutRow(shortcutsGrid, 4, "Ctrl + 3", "Go to Persons");
+        addShortcutRow(shortcutsGrid, 5, "Escape", "Back / Close detail");
+
+        content.getChildren().addAll(header, sep, themeRow, new Separator(), sidebarRow, new Separator(), kbHeader, shortcutsGrid);
 
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
         dialog.showAndWait();
+    }
+
+    private void addShortcutRow(GridPane grid, int row, String keys, String action) {
+        String keyBg = tm.isDark() ? "#2a2a2a" : "#f0f0f0";
+        String keyBorder = tm.isDark() ? "#484848" : "#c8c8c8";
+        Label keyLabel = new Label(keys);
+        keyLabel.setFont(Font.font("System Mono", FontWeight.NORMAL, 11));
+        keyLabel.setStyle(String.format(
+            "-fx-background-color: %s; -fx-border-color: %s; " +
+            "-fx-border-radius: 4; -fx-background-radius: 4; -fx-padding: 2 8 2 8;",
+            keyBg, keyBorder));
+
+        Label actionLabel = new Label(action);
+        actionLabel.setFont(Font.font("System", 12));
+        actionLabel.getStyleClass().add("text-muted");
+
+        grid.add(keyLabel, 0, row);
+        grid.add(actionLabel, 1, row);
     }
 
     private void applyTheme() {
@@ -677,8 +732,83 @@ public class MainView {
     public void showCaseDetail(CourtCase courtCase) {
         hideCurrentCachedView();
         showingDetail = true;
-        CaseDetailView detailView = new CaseDetailView(courtCase, this::onBack);
+        CaseDetailView detailView = new CaseDetailView(courtCase, this::onBack, this::showPersonDetail);
         contentArea.getChildren().add(detailView.getRoot());
+    }
+
+    public void registerKeyShortcuts(javafx.scene.Scene scene) {
+        scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
+            if (e.isControlDown() && e.isShiftDown() && e.getCode() == KeyCode.N) {
+                openNewPersonDialog(); e.consume();
+            } else if (e.isControlDown() && e.getCode() == KeyCode.N) {
+                openNewCaseDialog(); e.consume();
+            } else if (e.getCode() == KeyCode.ESCAPE && showingDetail) {
+                onBack(); e.consume();
+            } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT1) {
+                navigateTo("dashboard"); e.consume();
+            } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT2) {
+                navigateTo("cases"); e.consume();
+            } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT3) {
+                navigateTo("offenders"); e.consume();
+            }
+        });
+    }
+
+    private void openNewCaseDialog() {
+        CaseRepository caseRepo = CaseRepository.getInstance();
+        CaseFormDialog dialog = new CaseFormDialog(null);
+        while (true) {
+            Optional<CourtCase> result = dialog.showAndWait();
+            if (result.isEmpty()) break;
+            CourtCase c = result.get();
+            List<CaseFormDialog.ParticipantEntry> participants = dialog.getParticipantsToCreate();
+            caseRepo.save(c, null, () -> {
+                com.courttrack.model.Charge charge = new com.courttrack.model.Charge();
+                charge.setCaseId(c.getCaseId());
+                charge.setParticulars(c.getChargeParticulars());
+                charge.setPlea(c.getChargePlea());
+                charge.setVerdict(c.getChargeVerdict());
+                caseRepo.saveCharge(charge, () -> saveParticipantsInBackground(c, participants));
+            });
+            if (!dialog.isAddAnother()) break;
+            dialog = new CaseFormDialog(null);
+        }
+        if (cachedDashboard != null) cachedDashboard.refresh();
+        if (cachedCases != null) cachedCases.refresh();
+    }
+
+    private void saveParticipantsInBackground(CourtCase c, List<CaseFormDialog.ParticipantEntry> entries) {
+        if (entries.isEmpty()) return;
+        for (CaseFormDialog.ParticipantEntry entry : entries) {
+            Person p = new Person();
+            p.setFirstName(entry.firstName());
+            p.setLastName(entry.lastName());
+            if (!entry.nationalId().isBlank()) p.setNationalId(entry.nationalId());
+            new PersonDao().insert(p);
+            CaseParticipant cp = new CaseParticipant();
+            cp.setCaseId(c.getCaseId());
+            cp.setPersonId(p.getPersonId());
+            cp.setRoleType(entry.roleType());
+            new CaseDao().addParticipant(cp);
+        }
+    }
+
+    private void openNewPersonDialog() {
+        OffenderFormDialog dialog = new OffenderFormDialog(null);
+        Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
+        result.ifPresent(link -> {
+            PersonDao personDao = new PersonDao();
+            personDao.insert(link.getPerson());
+            if (link.getCourtCase() != null) {
+                CaseParticipant cp = new CaseParticipant();
+                cp.setCaseId(link.getCourtCase().getCaseId());
+                cp.setPersonId(link.getPerson().getPersonId());
+                cp.setRoleType("Accused");
+                new CaseDao().addParticipant(cp);
+            }
+            if (cachedDashboard != null) cachedDashboard.refresh();
+            if (cachedOffenders != null) cachedOffenders.refresh();
+        });
     }
 
     public void showPersonDetail(Person person) {

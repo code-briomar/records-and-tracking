@@ -7,8 +7,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.logging.Logger;
 
 public class DatabaseManager {
+    private static final Logger LOGGER = Logger.getLogger(DatabaseManager.class.getName());
     private static final String DB_DIR = getDataDir();
     private static final String DB_NAME = "court_records";
     private static final String DB_URL = "jdbc:h2:file:" + DB_DIR + "/" + DB_NAME + ";MODE=MySQL;AUTO_SERVER=TRUE";

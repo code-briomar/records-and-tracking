@@ -199,7 +199,7 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
         caseFieldCol.setHgrow(Priority.ALWAYS);
         caseGrid.getColumnConstraints().addAll(caseLabelCol, caseFieldCol);
 
-        caseGrid.add(fieldLabel("Case *"), 0, 0);
+        caseGrid.add(fieldLabel("Case (optional)"), 0, 0);
         caseGrid.add(caseRow, 1, 0);
 
         content.getChildren().add(caseGrid);
@@ -237,9 +237,6 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
                 event.consume();
             } else if (trimOrEmpty(nationalIdField.getText()).isEmpty()) {
                 showValidationError("National ID is required.");
-                event.consume();
-            } else if (caseBox.getValue() == null) {
-                showValidationError("Please select a case to assign this person to.");
                 event.consume();
             }
         });

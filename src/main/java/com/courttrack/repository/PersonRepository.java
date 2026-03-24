@@ -3,11 +3,13 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 import com.courttrack.dao.PersonDao;
 import com.courttrack.model.Person;
 import com.courttrack.sync.SyncCoordinator;
 public class PersonRepository {
+    private static final Logger LOGGER = Logger.getLogger(PersonRepository.class.getName());
     private static volatile PersonRepository instance;
     private final PersonDao dao = new PersonDao();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();

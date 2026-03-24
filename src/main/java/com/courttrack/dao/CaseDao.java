@@ -9,8 +9,11 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.IntConsumer;
+import java.util.logging.Logger;
 
 public class CaseDao {
+    private static final Logger LOGGER = Logger.getLogger(CaseDao.class.getName());
     private final DatabaseManager db = DatabaseManager.getInstance();
 
     private static final String SELECT_WITH_CHARGE = """
@@ -36,19 +39,35 @@ public class CaseDao {
                 list.add(mapRowWithCharge(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return list;
     }
 
     public int countAll() {
-        return countWithCondition("");
+        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        } catch (SQLException e) {
+            LOGGER.severe("Error counting all cases: " + e.getMessage());
+        }
+        return 0;
     }
 
     public int countByStatusAndCategory(String status, String category) {
         StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM court_case WHERE is_deleted = 0");
-        if (status != null && !status.equals("All")) sql.append(" AND case_status = ?");
-        if (category != null && !category.equals("All")) sql.append(" AND case_category = ?");
+        List<String> params = new ArrayList<>();
+        if (status != null && !status.equals("All")) {
+            sql.append(" AND case_status = ?");
+            params.add(status);
+        }
+        if (category != null && !category.equals("All")) {
+            sql.append(" AND case_category = ?");
+            params.add(category);
+        }
 
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql.toString())) {
@@ -58,7 +77,7 @@ public class CaseDao {
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return rs.getInt(1);
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return 0;
     }
@@ -86,7 +105,7 @@ public class CaseDao {
                 list.add(mapRowWithCharge(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return list;
     }
@@ -99,7 +118,7 @@ public class CaseDao {
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return mapRowWithCharge(rs);
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return null;
     }
@@ -120,7 +139,7 @@ public class CaseDao {
                 list.add(mapRowWithCharge(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return list;
     }
@@ -136,7 +155,7 @@ public class CaseDao {
                 list.add(mapRowWithCharge(rs));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return list;
     }
@@ -173,7 +192,7 @@ public class CaseDao {
             ps.setString(20, c.getCourtAssistant());
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
@@ -211,7 +230,7 @@ public class CaseDao {
             ps.setString(20, c.getCaseId());
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
@@ -222,23 +241,49 @@ public class CaseDao {
             ps.setString(1, caseId);
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
     public int countByStatus(String status) {
-        return countWithCondition("AND case_status = '" + status + "'");
+        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 AND case_status = ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOGGER.severe("Error counting cases by status: " + e.getMessage());
+        }
+        return 0;
     }
 
-    private int countWithCondition(String condition) {
-        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 " + condition;
+    public int countActive() {
+        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 AND case_status NOT IN ('CLOSED', 'DISMISSED', 'SETTLED')";
         try (Connection conn = db.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
             rs.next();
             return rs.getInt(1);
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Error counting active cases: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    public int countFiledToday() {
+        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 AND filing_date = ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, LocalDate.now().toString());
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOGGER.severe("Error counting cases filed today: " + e.getMessage());
         }
         return 0;
     }
@@ -256,7 +301,7 @@ public class CaseDao {
             ps.setInt(5, cp.isActive() ? 1 : 0);
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
@@ -277,7 +322,7 @@ public class CaseDao {
                 list.add(cp);
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return list;
     }
@@ -301,7 +346,7 @@ public class CaseDao {
             ps.setString(8, charge.getSentenceNotes());
             ps.executeUpdate();
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
@@ -352,7 +397,7 @@ public class CaseDao {
                 list.add(ch);
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            LOGGER.severe("Database error: " + e.getMessage());
         }
         return list;
     }

@@ -3,12 +3,14 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 import com.courttrack.dao.CaseDao;
 import com.courttrack.model.Charge;
 import com.courttrack.model.CourtCase;
 import com.courttrack.sync.SyncCoordinator;
 public class CaseRepository {
+    private static final Logger LOGGER = Logger.getLogger(CaseRepository.class.getName());
     private static volatile CaseRepository instance;
     private final CaseDao dao = new CaseDao();
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -64,6 +66,14 @@ public class CaseRepository {
             dao.upsertFirstCharge(charge.getCaseId(), charge.getParticulars(), charge.getPlea(), charge.getVerdict());
             if (onComplete != null) onComplete.run();
         });
+    }
+
+    public void countActive(Consumer<Integer> onResult) {
+        executor.submit(() -> onResult.accept(dao.countActive()));
+    }
+
+    public void countFiledToday(Consumer<Integer> onResult) {
+        executor.submit(() -> onResult.accept(dao.countFiledToday()));
     }
 
     public void delete(String caseId, Runnable onComplete) {

@@ -4,13 +4,16 @@ import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.Charge;
 import com.courttrack.model.CourtCase;
+import com.courttrack.model.Person;
 import com.courttrack.repository.CaseRepository;
+import com.courttrack.repository.PersonRepository;
 import com.courttrack.sync.SyncCoordinator;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -23,19 +26,27 @@ import javafx.stage.Modality;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public class CaseDetailView {
     private final VBox root;
     private final CourtCase courtCase;
+    private final CaseDao caseDao = new CaseDao();
     private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Runnable onBack;
+    private final Consumer<Person> onViewPerson;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd MMM yyyy");
 
     public CaseDetailView(CourtCase courtCase, Runnable onBack) {
+        this(courtCase, onBack, null);
+    }
+
+    public CaseDetailView(CourtCase courtCase, Runnable onBack, Consumer<Person> onViewPerson) {
         this.courtCase = courtCase;
         this.onBack = onBack;
+        this.onViewPerson = onViewPerson;
         this.root = new VBox(0);
         populateUI(courtCase);
     }
@@ -241,21 +252,44 @@ public class CaseDetailView {
             cards.getChildren().add(descCard);
         }
 
-        // Card 7: Participants - loaded separately via repository
-        caseRepo.getCharges(c.getCaseId(), charges -> {
-            Platform.runLater(() -> {
-                if (!charges.isEmpty()) {
-                    VBox partCard = buildCard("Participants", Feather.USERS, tm.accentBlue());
-                    GridPane partGrid = buildDetailGrid();
-                    int prow = 0;
-                    for (Charge ch : charges) {
-                        addDetailRow(partGrid, prow++, ch.getOffenseCode() != null ? ch.getOffenseCode() : "Charge", ch.getParticulars());
-                    }
-                    partCard.getChildren().add(partGrid);
-                    cards.getChildren().add(partCard);
-                }
-            });
-        });
+        // Card 7: Participants — loaded from CaseDao.getParticipants
+        List<CaseParticipant> participants = caseDao.getParticipants(c.getCaseId());
+        if (!participants.isEmpty()) {
+            VBox partCard = buildCard("Participants", Feather.USERS, tm.accentBlue());
+            VBox partList = new VBox(8);
+            partList.setPadding(new Insets(10, 16, 14, 16));
+            partCard.getChildren().add(partList);
+            cards.getChildren().add(partCard);
+
+            for (CaseParticipant cp : participants) {
+                PersonRepository.getInstance().getById(cp.getPersonId(), person -> {
+                    if (person == null) return;
+                    Platform.runLater(() -> {
+                        HBox personRow = new HBox(10);
+                        personRow.setAlignment(Pos.CENTER_LEFT);
+
+                        Hyperlink nameLink = new Hyperlink(person.getFirstName() + " " + person.getLastName());
+                        nameLink.setFont(Font.font("System", 13));
+                        if (onViewPerson != null) {
+                            nameLink.setOnAction(e -> onViewPerson.accept(person));
+                        }
+
+                        if (cp.getRoleType() != null && !cp.getRoleType().isBlank()) {
+                            Label roleLabel = new Label(cp.getRoleType());
+                            roleLabel.setPadding(new Insets(2, 8, 2, 8));
+                            roleLabel.setFont(Font.font("System", 10));
+                            roleLabel.setStyle(String.format(
+                                "-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;",
+                                tm.accentBlue() + "22", tm.accentBlue()));
+                            personRow.getChildren().addAll(nameLink, roleLabel);
+                        } else {
+                            personRow.getChildren().add(nameLink);
+                        }
+                        partList.getChildren().add(personRow);
+                    });
+                });
+            }
+        }
 
         cards.getChildren().addAll(0, java.util.List.of(caseInfoCard, chargeCard, judgmentCard, detailCard, evidenceCard));
 
@@ -350,7 +384,9 @@ public class CaseDetailView {
             case "Criminal" -> tm.badgeCriminalBg();
             case "Traffic" -> tm.badgeTrafficBg();
             case "Civil" -> tm.badgeCivilBg();
-            default -> "#eee";
+            case "Succession" -> tm.badgeSuccessionBg();
+            case "Children" -> tm.badgeChildrenBg();
+            default -> tm.badgeOtherBg();
         };
     }
 
@@ -359,7 +395,9 @@ public class CaseDetailView {
             case "Criminal" -> tm.badgeCriminalText();
             case "Traffic" -> tm.badgeTrafficText();
             case "Civil" -> tm.badgeCivilText();
-            default -> "#888";
+            case "Succession" -> tm.badgeSuccessionText();
+            case "Children" -> tm.badgeChildrenText();
+            default -> tm.badgeOtherText();
         };
     }
 

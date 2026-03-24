@@ -57,6 +57,12 @@ public class ThemeManager {
     public String badgeTrafficText() { return isDark() ? "#e8a54b" : "#d9730d"; }
     public String badgeCivilBg() { return isDark() ? "#2eaadc33" : "#ddebf1"; }
     public String badgeCivilText() { return isDark() ? "#68c4e8" : "#2eaadc"; }
+    public String badgeSuccessionBg() { return isDark() ? "#9065b033" : "#ede9f5"; }
+    public String badgeSuccessionText() { return isDark() ? "#b899d4" : "#9065b0"; }
+    public String badgeChildrenBg() { return isDark() ? "#d55e8a33" : "#fce8f0"; }
+    public String badgeChildrenText() { return isDark() ? "#e896b8" : "#d55e8a"; }
+    public String badgeOtherBg() { return isDark() ? "#66666633" : "#ebebeb"; }
+    public String badgeOtherText() { return isDark() ? "#aaaaaa" : "#555555"; }
 
     // --- Misc ---
     public String logoutText() { return "#eb5757"; }

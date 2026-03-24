@@ -112,6 +112,12 @@ public class SyncCoordinator {
         LOGGER.info("========== Starting sync for court: " + courtId + " ==========");
         SyncStatus.getInstance().set(SyncStatus.State.SYNCING, "Syncing...");
         try {
+            // Authenticate before any isAvailable() checks — auth is lazy in REST calls but
+            // isAvailable() gates push operations before any REST call is made.
+            LOGGER.info("Ensuring Firebase authentication...");
+            FirebaseRestClient.getInstance().ensureAuthenticated();
+            LOGGER.info("Firebase authenticated, proceeding with sync");
+
             long syncId = startSync("manual", "bidirectional", System.getProperty("os.name"));
             currentSyncId = syncId;
             SyncStatus.getInstance().set(SyncStatus.State.SYNCING, "Pushing local changes...");

@@ -203,14 +203,34 @@ public class DashboardView {
 
     private void handleNewCase() {
         CaseFormDialog dialog = new CaseFormDialog(null);
-        Optional<CourtCase> result = dialog.showAndWait();
-        result.ifPresent(c -> {
+        while (true) {
+            Optional<CourtCase> result = dialog.showAndWait();
+            if (result.isEmpty()) break;
+            CourtCase c = result.get();
+            java.util.List<CaseFormDialog.ParticipantEntry> participants = dialog.getParticipantsToCreate();
             caseDao.insert(c);
             caseDao.upsertFirstCharge(c.getCaseId(), c.getChargeParticulars(), c.getChargePlea(), c.getChargeVerdict());
-            // Refresh dashboard
-            root.getChildren().clear();
-            buildUI();
-        });
+            saveParticipants(c, participants);
+            if (!dialog.isAddAnother()) break;
+            dialog = new CaseFormDialog(null);
+        }
+        loadDataAsync();
+    }
+
+    private void saveParticipants(CourtCase c, java.util.List<CaseFormDialog.ParticipantEntry> entries) {
+        if (entries.isEmpty()) return;
+        for (CaseFormDialog.ParticipantEntry entry : entries) {
+            Person p = new Person();
+            p.setFirstName(entry.firstName());
+            p.setLastName(entry.lastName());
+            if (!entry.nationalId().isBlank()) p.setNationalId(entry.nationalId());
+            personDao.insert(p);
+            CaseParticipant cp = new CaseParticipant();
+            cp.setCaseId(c.getCaseId());
+            cp.setPersonId(p.getPersonId());
+            cp.setRoleType(entry.roleType());
+            caseDao.addParticipant(cp);
+        }
     }
 
     private void handleNewPerson() {
@@ -219,14 +239,14 @@ public class DashboardView {
         result.ifPresent(link -> {
             Person p = link.getPerson();
             personDao.insert(p);
-            CaseParticipant cp = new CaseParticipant();
-            cp.setCaseId(link.getCourtCase().getCaseId());
-            cp.setPersonId(p.getPersonId());
-            cp.setRoleType("Accused");
-            caseDao.addParticipant(cp);
-            // Refresh dashboard
-            root.getChildren().clear();
-            buildUI();
+            if (link.getCourtCase() != null) {
+                CaseParticipant cp = new CaseParticipant();
+                cp.setCaseId(link.getCourtCase().getCaseId());
+                cp.setPersonId(p.getPersonId());
+                cp.setRoleType("Accused");
+                caseDao.addParticipant(cp);
+            }
+            loadDataAsync();
         });
     }
 
@@ -300,8 +320,22 @@ public class DashboardView {
                     setGraphic(null);
                 } else {
                     badge.setText(cat);
-                    String color = switch (cat) { case "Criminal" -> tm.badgeCriminalText(); case "Traffic" -> tm.badgeTrafficText(); case "Civil" -> tm.badgeCivilText(); default -> "#888"; };
-                    String bg = switch (cat) { case "Criminal" -> tm.badgeCriminalBg(); case "Traffic" -> tm.badgeTrafficBg(); case "Civil" -> tm.badgeCivilBg(); default -> "#eee"; };
+                    String color = switch (cat) {
+                        case "Criminal" -> tm.badgeCriminalText();
+                        case "Traffic" -> tm.badgeTrafficText();
+                        case "Civil" -> tm.badgeCivilText();
+                        case "Succession" -> tm.badgeSuccessionText();
+                        case "Children" -> tm.badgeChildrenText();
+                        default -> tm.badgeOtherText();
+                    };
+                    String bg = switch (cat) {
+                        case "Criminal" -> tm.badgeCriminalBg();
+                        case "Traffic" -> tm.badgeTrafficBg();
+                        case "Civil" -> tm.badgeCivilBg();
+                        case "Succession" -> tm.badgeSuccessionBg();
+                        case "Children" -> tm.badgeChildrenBg();
+                        default -> tm.badgeOtherBg();
+                    };
                     badge.setStyle(String.format("-fx-background-color: %s; -fx-text-fill: %s; -fx-background-radius: 4;", bg, color));
                     setGraphic(badge);
                 }
