@@ -154,6 +154,49 @@ public class PersonDao {
         return 0;
     }
 
+    public int countByGender(String gender) {
+        if (gender == null || gender.equals("All")) return countAll();
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND gender = ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, gender);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            LOGGER.severe("Database error in countByGender: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    public List<Person> findAllPaginatedByGender(String gender, int offset, int limit) {
+        if (gender == null || gender.equals("All")) return findAllPaginated(offset, limit);
+        List<Person> list = new ArrayList<>();
+        String sql = "SELECT * FROM person WHERE is_deleted = 0 AND gender = ? ORDER BY last_name, first_name LIMIT ? OFFSET ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, gender);
+            ps.setInt(2, limit);
+            ps.setInt(3, offset);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) list.add(mapRow(rs));
+        } catch (SQLException e) {
+            LOGGER.severe("Database error in findAllPaginatedByGender: " + e.getMessage());
+        }
+        return list;
+    }
+
+    public int countAddedThisMonth() {
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')";
+        try (Connection conn = db.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            // created_at column may not exist — fall back to 0
+        }
+        return 0;
+    }
+
     private Person mapRow(ResultSet rs) throws SQLException {
         Person p = new Person(rs.getString("person_id"));
         p.setNationalId(rs.getString("national_id"));

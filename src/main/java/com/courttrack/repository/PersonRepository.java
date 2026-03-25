@@ -42,6 +42,27 @@ public class PersonRepository {
             onResult.accept(count);
         });
     }
+    public void getAllPaginatedFiltered(String gender, int offset, int limit, Consumer<List<Person>> onResult) {
+        executor.submit(() -> {
+            List<Person> result = dao.findAllPaginatedByGender(gender, offset, limit);
+            onResult.accept(result);
+        });
+    }
+
+    public void countFiltered(String gender, Consumer<Integer> onResult) {
+        executor.submit(() -> {
+            int count = dao.countByGender(gender);
+            onResult.accept(count);
+        });
+    }
+
+    public void countAddedThisMonth(Consumer<Integer> onResult) {
+        executor.submit(() -> {
+            int count = dao.countAddedThisMonth();
+            onResult.accept(count);
+        });
+    }
+
     public void search(String query, Consumer<List<Person>> onResult) {
         executor.submit(() -> {
             List<Person> result = dao.search(query);

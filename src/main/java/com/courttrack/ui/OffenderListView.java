@@ -1,6 +1,6 @@
 package com.courttrack.ui;
 
-import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +14,9 @@ import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.Person;
 import com.courttrack.repository.PersonRepository;
-import com.courttrack.repository.CaseRepository;
 
 import javafx.application.Platform;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -33,7 +33,6 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Tooltip;
-import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
@@ -46,20 +45,22 @@ import javafx.stage.Modality;
 public class OffenderListView {
     private final VBox root;
     private final PersonRepository personRepo = PersonRepository.getInstance();
-    private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Consumer<Person> onViewDetail;
     private TableView<Person> table;
     private ObservableList<Person> personList;
     private Label placeholderLabel;
     private TextField searchField;
-    private ComboBox<Integer> pageSizeSelector;
+    private ComboBox<String> genderFilter;
+    private Label totalPersonsLabel;
+    private Label newThisMonthLabel;
+    private Label showingLabel;
+    private HBox paginationBox;
     private Button prevBtn, nextBtn;
-    private Label pageLabel;
     private int currentPage = 0;
-    private int pageSize = 15;
+    private final int pageSize = 15;
     private int totalCount = 0;
-    private final Map<String, List<Person>> pageCache = new LinkedHashMap<String, List<Person>>(5, 0.75f, true) {
+    private final Map<String, List<Person>> pageCache = new LinkedHashMap<>(5, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, List<Person>> eldest) {
             return size() > 5;
@@ -68,60 +69,72 @@ public class OffenderListView {
 
     public OffenderListView(Consumer<Person> onViewDetail) {
         this.onViewDetail = onViewDetail;
-        root = new VBox(20);
+        root = new VBox(0);
         root.setPadding(new Insets(32, 40, 32, 40));
         buildUI();
         loadPage();
+        loadStats();
     }
 
     public void refresh() {
         currentPage = 0;
         pageCache.clear();
         loadPage();
+        loadStats();
+    }
+
+    private void loadStats() {
+        personRepo.countAll(count -> Platform.runLater(() ->
+            totalPersonsLabel.setText(String.format("%,d", count))));
+        personRepo.countAddedThisMonth(count -> Platform.runLater(() ->
+            newThisMonthLabel.setText(String.format("%,d", count))));
     }
 
     private String buildCacheKey(int page) {
+        String gender = genderFilter.getValue();
         String query = searchField.getText();
-        return (query != null ? query : "") + "|" + page;
+        return (gender != null ? gender : "All") + "|" + (query != null ? query : "") + "|" + page;
     }
 
     private void loadPage() {
+        String gender = genderFilter.getValue();
         String query = searchField.getText();
         String cacheKey = buildCacheKey(currentPage);
-        
+        int offset = currentPage * pageSize;
+
         List<Person> cached = pageCache.get(cacheKey);
         if (cached != null) {
             personList.setAll(cached);
-            updatePlaceholder(query != null && !query.isEmpty() ? "No matching offenders found" : "No offenders in the system");
-            personRepo.countAll(count -> Platform.runLater(() -> {
+            updatePlaceholder(query != null && !query.isEmpty() ? "No matching persons found" : "No persons in the system");
+            personRepo.countFiltered(gender, count -> Platform.runLater(() -> {
                 totalCount = count;
                 updatePaginationControls();
             }));
             preloadNextPage();
             return;
         }
-        
+
         if (query != null && !query.isEmpty()) {
             personRepo.search(query, persons -> {
                 int count = persons.size();
-                List<Person> paged = persons.stream().skip(currentPage * pageSize).limit(pageSize).toList();
+                List<Person> paged = persons.stream().skip(offset).limit(pageSize).toList();
                 pageCache.put(buildCacheKey(currentPage), paged);
                 Platform.runLater(() -> {
                     personList.setAll(paged);
                     totalCount = count;
-                    updatePlaceholder(count == 0 ? "No matching offenders found" : null);
+                    updatePlaceholder(count == 0 ? "No matching persons found" : null);
                     updatePaginationControls();
                 });
                 preloadNextPage();
             });
         } else {
-            personRepo.getAllPaginated(currentPage * pageSize, pageSize, persons -> {
+            personRepo.getAllPaginatedFiltered(gender, offset, pageSize, persons -> {
                 pageCache.put(buildCacheKey(currentPage), persons);
-                personRepo.countAll(count -> {
+                personRepo.countFiltered(gender, count -> {
                     Platform.runLater(() -> {
                         personList.setAll(persons);
                         totalCount = count;
-                        updatePlaceholder(count == 0 ? "No offenders in the system" : null);
+                        updatePlaceholder(count == 0 ? "No persons in the system" : null);
                         updatePaginationControls();
                     });
                     preloadNextPage();
@@ -144,10 +157,11 @@ public class OffenderListView {
     private void preloadNextPage() {
         String nextKey = buildCacheKey(currentPage + 1);
         if (pageCache.containsKey(nextKey)) return;
-        
+
+        String gender = genderFilter.getValue();
         String query = searchField.getText();
         int nextOffset = (currentPage + 1) * pageSize;
-        
+
         if (query != null && !query.isEmpty()) {
             personRepo.search(query, persons -> {
                 if (persons.size() > nextOffset) {
@@ -156,7 +170,7 @@ public class OffenderListView {
                 }
             });
         } else {
-            personRepo.getAllPaginated(nextOffset, pageSize, persons -> {
+            personRepo.getAllPaginatedFiltered(gender, nextOffset, pageSize, persons -> {
                 if (!persons.isEmpty()) {
                     pageCache.put(nextKey, persons);
                 }
@@ -166,109 +180,251 @@ public class OffenderListView {
 
     private void updatePaginationControls() {
         int totalPages = (int) Math.ceil((double) totalCount / pageSize);
-        pageLabel.setText((currentPage + 1) + " / " + Math.max(1, totalPages));
+        int offset = currentPage * pageSize;
+        int from = totalCount == 0 ? 0 : offset + 1;
+        int to = Math.min(offset + pageSize, totalCount);
+        showingLabel.setText(String.format("Showing %d\u2013%d of %,d records", from, to, totalCount));
+        rebuildPaginationButtons(Math.max(1, totalPages));
+    }
+
+    private void rebuildPaginationButtons(int totalPages) {
+        paginationBox.getChildren().clear();
+
+        String btnBase = "-fx-background-radius: 4; -fx-cursor: hand; -fx-padding: 4 10; -fx-font-size: 12;";
+        String btnNormal = btnBase + "-fx-background-color: transparent;";
+        String btnActiveStyle = btnBase + "-fx-background-color: " + tm.accentBlue() + "; -fx-text-fill: white;";
+
         prevBtn.setDisable(currentPage == 0);
         nextBtn.setDisable(currentPage >= totalPages - 1 || totalCount == 0);
+
+        paginationBox.getChildren().add(prevBtn);
+
+        int maxVisible = 7;
+        int half = maxVisible / 2;
+        int start, end;
+        if (totalPages <= maxVisible) {
+            start = 0;
+            end = totalPages;
+        } else if (currentPage <= half) {
+            start = 0;
+            end = maxVisible - 1;
+        } else if (currentPage >= totalPages - half - 1) {
+            start = totalPages - maxVisible + 1;
+            end = totalPages;
+        } else {
+            start = currentPage - half + 1;
+            end = currentPage + half;
+        }
+
+        if (start > 0) {
+            paginationBox.getChildren().add(pageBtn("1", btnNormal, btnActiveStyle, 0, currentPage == 0));
+            if (start > 1) {
+                Label dots = new Label("\u2026");
+                dots.setStyle("-fx-padding: 4 4;");
+                paginationBox.getChildren().add(dots);
+            }
+        }
+        for (int i = start; i < end && i < totalPages; i++) {
+            paginationBox.getChildren().add(pageBtn(String.valueOf(i + 1), btnNormal, btnActiveStyle, i, i == currentPage));
+        }
+        if (end < totalPages) {
+            if (end < totalPages - 1) {
+                Label dots = new Label("\u2026");
+                dots.setStyle("-fx-padding: 4 4;");
+                paginationBox.getChildren().add(dots);
+            }
+            paginationBox.getChildren().add(pageBtn(String.valueOf(totalPages), btnNormal, btnActiveStyle,
+                totalPages - 1, currentPage == totalPages - 1));
+        }
+
+        paginationBox.getChildren().add(nextBtn);
+    }
+
+    private Button pageBtn(String text, String normalStyle, String activeStyle, int page, boolean isActive) {
+        Button btn = new Button(text);
+        btn.setStyle(isActive ? activeStyle : normalStyle);
+        btn.setOnAction(e -> { currentPage = page; loadPage(); });
+        if (!isActive) {
+            btn.setOnMouseEntered(ev -> btn.setStyle(normalStyle + "-fx-background-color: " + tm.accentBlue() + "22;"));
+            btn.setOnMouseExited(ev -> btn.setStyle(normalStyle));
+        }
+        return btn;
+    }
+
+    private VBox makeStatCard(String labelText, Label valueLabel) {
+        Label lbl = new Label(labelText);
+        lbl.setFont(Font.font("System", FontWeight.BOLD, 10));
+        lbl.getStyleClass().add("text-muted");
+
+        valueLabel.setFont(Font.font("System", FontWeight.BOLD, 28));
+
+        VBox card = new VBox(4, lbl, valueLabel);
+        card.setPadding(new Insets(14, 24, 14, 24));
+        card.setStyle(
+            "-fx-background-radius: 6;" +
+            "-fx-background-color: " + (tm.isDark() ? "#ffffff0a" : "#00000008") + ";" +
+            "-fx-border-color: " + (tm.isDark() ? "#ffffff14" : "#00000014") + ";" +
+            "-fx-border-radius: 6;"
+        );
+        return card;
     }
 
     private void buildUI() {
-        Label pageTitle = new Label("Offenders");
-        pageTitle.setFont(Font.font("System", FontWeight.BOLD, 32));
+        // ── Title ──────────────────────────────────────────────────────────────
+        Label pageTitle = new Label("Persons");
+        pageTitle.setFont(Font.font("System", FontWeight.BOLD, 26));
+        VBox.setMargin(pageTitle, new Insets(0, 0, 20, 0));
 
-        Label pageSubtitle = new Label("A database of all persons in the court system");
-        pageSubtitle.setFont(Font.font("System", 14));
-        pageSubtitle.getStyleClass().add("text-muted");
+        // ── Filter row ─────────────────────────────────────────────────────────
+        Label genderLabel = new Label("GENDER");
+        genderLabel.setFont(Font.font("System", FontWeight.BOLD, 10));
+        genderLabel.getStyleClass().add("text-muted");
+        genderFilter = new ComboBox<>(FXCollections.observableArrayList("All", "Male", "Female", "Other"));
+        genderFilter.setValue("All");
+        genderFilter.setPrefWidth(140);
+        genderFilter.setOnAction(e -> { pageCache.clear(); currentPage = 0; loadPage(); });
+        VBox genderBox = new VBox(4, genderLabel, genderFilter);
 
-        VBox titleBox = new VBox(-2, pageTitle, pageSubtitle);
-
-        HBox toolbar = new HBox(12);
-        toolbar.setAlignment(Pos.CENTER_LEFT);
+        FontIcon filterIcon = new FontIcon(Feather.SLIDERS);
+        filterIcon.setIconSize(13);
+        Button refineBtn = new Button("REFINE SEARCH");
+        refineBtn.setGraphic(filterIcon);
+        refineBtn.setOnAction(e -> { pageCache.clear(); currentPage = 0; loadPage(); });
+        VBox refineBtnWrapper = new VBox(refineBtn);
+        refineBtnWrapper.setAlignment(Pos.BOTTOM_LEFT);
 
         searchField = new TextField();
-        searchField.setPromptText("Filter...");
-        searchField.setPrefWidth(240);
+        searchField.setPromptText("Search by name or national ID...");
+        searchField.setPrefWidth(260);
         searchField.textProperty().addListener((obs, o, n) -> { pageCache.clear(); currentPage = 0; loadPage(); });
+        VBox searchWrapper = new VBox(searchField);
+        searchWrapper.setAlignment(Pos.BOTTOM_LEFT);
 
-        pageSizeSelector = new ComboBox<>(FXCollections.observableArrayList(5, 10, 15, 20, 25, 30, 40, 50, 75, 100));
-        pageSizeSelector.setValue(15);
-        pageSizeSelector.setOnAction(e -> {
-            pageSize = pageSizeSelector.getValue();
-            pageCache.clear();
-            currentPage = 0;
-            loadPage();
-        });
+        Region filterSpacer = new Region();
+        HBox.setHgrow(filterSpacer, Priority.ALWAYS);
+        HBox filterRow = new HBox(12, genderBox, refineBtnWrapper, filterSpacer, searchWrapper);
+        filterRow.setAlignment(Pos.BOTTOM_LEFT);
+        VBox.setMargin(filterRow, new Insets(0, 0, 20, 0));
 
-        prevBtn = new Button("Prev");
-        prevBtn.setOnAction(e -> { if (currentPage > 0) { currentPage--; loadPage(); } });
-        
-        pageLabel = new Label("1 / 1");
-        pageLabel.setMinWidth(60);
-        pageLabel.setAlignment(Pos.CENTER);
-        
-        nextBtn = new Button("Next");
-        nextBtn.setOnAction(e -> { currentPage++; loadPage(); });
+        // ── Stats cards ────────────────────────────────────────────────────────
+        totalPersonsLabel = new Label("\u2014");
+        newThisMonthLabel = new Label("\u2014");
+        VBox totalCard = makeStatCard("TOTAL PERSONS", totalPersonsLabel);
+        VBox monthCard = makeStatCard("NEW THIS MONTH", newThisMonthLabel);
+        HBox statsRow = new HBox(12, totalCard, monthCard);
+        VBox.setMargin(statsRow, new Insets(0, 0, 24, 0));
 
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        // ── Record header ──────────────────────────────────────────────────────
+        YearMonth ym = YearMonth.now();
+        Label archiveLabel = new Label("Person Records:  " + ym.getYear() + "/" + String.format("%02d", ym.getMonthValue()));
+        archiveLabel.setFont(Font.font("System", FontWeight.BOLD, 16));
 
-        Button addBtn = new Button("+ Add");
-        addBtn.getStyleClass().add("accent");
-        addBtn.setOnAction(e -> handleAdd());
+        showingLabel = new Label("Loading\u2026");
+        showingLabel.getStyleClass().add("text-muted");
+        showingLabel.setFont(Font.font("System", 12));
 
-        Label pageSizeLabel = new Label("Items:");
-        pageSizeLabel.setStyle("-fx-text-fill: #666;");
+        Region archiveSpacer = new Region();
+        HBox.setHgrow(archiveSpacer, Priority.ALWAYS);
+        HBox archiveRow = new HBox(archiveLabel, archiveSpacer, showingLabel);
+        archiveRow.setAlignment(Pos.CENTER_LEFT);
+        VBox.setMargin(archiveRow, new Insets(0, 0, 10, 0));
 
-        toolbar.getChildren().addAll(searchField, prevBtn, pageLabel, nextBtn, spacer, addBtn, pageSizeLabel, pageSizeSelector);
-
+        // ── Table ─────────────────────────────────────────────────────────────
         table = createTable();
         personList = FXCollections.observableArrayList();
         table.setItems(personList);
         placeholderLabel = new Label("Loading...");
         table.setPlaceholder(placeholderLabel);
         VBox.setVgrow(table, Priority.ALWAYS);
+        VBox.setMargin(table, new Insets(0, 0, 16, 0));
 
-        root.getChildren().addAll(titleBox, toolbar, table);
+        // ── Footer: pagination + add button ───────────────────────────────────
+        FontIcon chevLeft = new FontIcon(Feather.CHEVRON_LEFT);
+        chevLeft.setIconSize(13);
+        prevBtn = new Button();
+        prevBtn.setGraphic(chevLeft);
+        prevBtn.setStyle("-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 4 8; -fx-background-radius: 4;");
+        prevBtn.setOnAction(e -> { if (currentPage > 0) { currentPage--; loadPage(); } });
+
+        FontIcon chevRight = new FontIcon(Feather.CHEVRON_RIGHT);
+        chevRight.setIconSize(13);
+        nextBtn = new Button();
+        nextBtn.setGraphic(chevRight);
+        nextBtn.setStyle("-fx-background-color: transparent; -fx-cursor: hand; -fx-padding: 4 8; -fx-background-radius: 4;");
+        nextBtn.setOnAction(e -> { currentPage++; loadPage(); });
+
+        paginationBox = new HBox(4);
+        paginationBox.setAlignment(Pos.CENTER_LEFT);
+
+        FontIcon plusIcon = new FontIcon(Feather.PLUS);
+        plusIcon.setIconSize(14);
+        Button addBtn = new Button("  ADD NEW PERSON");
+        addBtn.setGraphic(plusIcon);
+        addBtn.getStyleClass().add("accent");
+        addBtn.setStyle("-fx-padding: 10 20; -fx-font-weight: bold; -fx-background-radius: 6;");
+        addBtn.setOnAction(e -> handleAdd());
+
+        Region footerSpacer = new Region();
+        HBox.setHgrow(footerSpacer, Priority.ALWAYS);
+        HBox footer = new HBox(paginationBox, footerSpacer, addBtn);
+        footer.setAlignment(Pos.CENTER_LEFT);
+
+        root.getChildren().addAll(pageTitle, filterRow, statsRow, archiveRow, table, footer);
     }
 
     @SuppressWarnings("unchecked")
     private TableView<Person> createTable() {
         TableView<Person> tv = new TableView<>();
-        tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_ALL_COLUMNS);
+        tv.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
-        TableColumn<Person, Number> numCol = new TableColumn<>("No.");
-        numCol.setPrefWidth(45);
-        numCol.setSortable(false);
-        numCol.setCellFactory(col -> new TableCell<>() {
+        TableColumn<Person, String> nameCol = new TableColumn<>("NAME");
+        nameCol.setPrefWidth(200);
+        nameCol.setMinWidth(140);
+        nameCol.setCellValueFactory(cd -> {
+            Person p = cd.getValue();
+            String name = "";
+            if (p.getFirstName() != null) name += p.getFirstName();
+            if (p.getLastName() != null) name += (name.isEmpty() ? "" : " ") + p.getLastName();
+            return new SimpleStringProperty(name);
+        });
+        nameCol.setCellFactory(col -> new TableCell<>() {
             @Override
-            protected void updateItem(Number item, boolean empty) {
+            protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
-                setText(empty ? null : String.valueOf((currentPage * pageSize) + getIndex() + 1));
+                if (empty || item == null) { setText(null); } else {
+                    setText(item);
+                    setFont(Font.font("System", FontWeight.MEDIUM, 13));
+                }
             }
         });
-        tv.getColumns().add(0, numCol);
 
-        TableColumn<Person, String> nameCol = new TableColumn<>("Name");
-        nameCol.setCellValueFactory(new PropertyValueFactory<>("fullName"));
+        TableColumn<Person, String> idCol = new TableColumn<>("NATIONAL ID");
+        idCol.setPrefWidth(140);
+        idCol.setCellValueFactory(cd -> new SimpleStringProperty(
+            cd.getValue().getNationalId() != null ? cd.getValue().getNationalId() : ""));
 
-        TableColumn<Person, String> idCol = new TableColumn<>("National ID");
-        idCol.setCellValueFactory(new PropertyValueFactory<>("nationalId"));
+        TableColumn<Person, String> genderCol = new TableColumn<>("GENDER");
+        genderCol.setPrefWidth(100);
+        genderCol.setCellValueFactory(cd -> new SimpleStringProperty(
+            cd.getValue().getGender() != null ? cd.getValue().getGender() : ""));
 
-        TableColumn<Person, String> genderCol = new TableColumn<>("Gender");
-        genderCol.setCellValueFactory(new PropertyValueFactory<>("gender"));
+        TableColumn<Person, String> dobCol = new TableColumn<>("DATE OF BIRTH");
+        dobCol.setPrefWidth(130);
+        dobCol.setCellValueFactory(cd -> new SimpleStringProperty(
+            cd.getValue().getDob() != null ? cd.getValue().getDob().toString() : ""));
 
-        TableColumn<Person, LocalDate> dobCol = new TableColumn<>("Date of Birth");
-        dobCol.setCellValueFactory(new PropertyValueFactory<>("dob"));
+        TableColumn<Person, String> phoneCol = new TableColumn<>("PHONE");
+        phoneCol.setPrefWidth(130);
+        phoneCol.setCellValueFactory(cd -> new SimpleStringProperty(
+            cd.getValue().getPhoneNumber() != null ? cd.getValue().getPhoneNumber() : ""));
 
-        TableColumn<Person, String> phoneCol = new TableColumn<>("Phone");
-        phoneCol.setCellValueFactory(new PropertyValueFactory<>("phoneNumber"));
-
-        TableColumn<Person, Void> actionsCol = new TableColumn<>();
+        TableColumn<Person, Void> actionsCol = new TableColumn<>("ACTIONS");
         actionsCol.setPrefWidth(100);
         actionsCol.setSortable(false);
         actionsCol.setCellFactory(col -> new TableCell<>() {
-            private final Button viewBtn = iconBtn(Feather.EYE, "View", tm.accentBlue());
-            private final Button editBtn = iconBtn(Feather.EDIT_2, "Edit", tm.accentGreen());
-            private final Button deleteBtn = iconBtn(Feather.TRASH_2, "Delete", tm.accentRed());
+            private final Button viewBtn = iconBtn(Feather.EYE, "View person", tm.accentBlue());
+            private final Button editBtn = iconBtn(Feather.EDIT_2, "Edit person", tm.accentGreen());
+            private final Button deleteBtn = iconBtn(Feather.TRASH_2, "Delete person", tm.accentRed());
             private final HBox box = new HBox(2, viewBtn, editBtn, deleteBtn);
             {
                 box.setAlignment(Pos.CENTER_LEFT);
@@ -283,13 +439,13 @@ public class OffenderListView {
         });
 
         tv.getColumns().addAll(nameCol, idCol, genderCol, dobCol, phoneCol, actionsCol);
-        tv.setPlaceholder(new Label("No items"));
-
+        tv.setPlaceholder(new Label("No persons found"));
         return tv;
     }
 
     private void refreshTable() {
         currentPage = 0;
+        pageCache.clear();
         loadPage();
     }
 
@@ -298,12 +454,14 @@ public class OffenderListView {
         Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
         result.ifPresent(link -> {
             personRepo.save(link.getPerson(), () -> {
-                CaseParticipant cp = new CaseParticipant();
-                cp.setCaseId(link.getCourtCase().getCaseId());
-                cp.setPersonId(link.getPerson().getPersonId());
-                cp.setRoleType("Accused");
-                com.courttrack.dao.CaseDao caseDao = new com.courttrack.dao.CaseDao();
-                caseDao.addParticipant(cp);
+                if (link.getCourtCase() != null && link.getCourtCase().getCaseId() != null) {
+                    CaseParticipant cp = new CaseParticipant();
+                    cp.setCaseId(link.getCourtCase().getCaseId());
+                    cp.setPersonId(link.getPerson().getPersonId());
+                    cp.setRoleType("Accused");
+                    CaseDao caseDao = new CaseDao();
+                    caseDao.addParticipant(cp);
+                }
                 Platform.runLater(this::refreshTable);
             });
         });
@@ -343,16 +501,10 @@ public class OffenderListView {
         }
     }
 
-    private String or(String s) {
-        return (s != null && !s.isBlank()) ? s : "\u2014";
-    }
-
     private void handleEdit(Person p) {
         OffenderFormDialog dialog = new OffenderFormDialog(p);
         Optional<OffenderFormDialog.PersonCaseLink> result = dialog.showAndWait();
-        result.ifPresent(link -> {
-            personRepo.save(link.getPerson(), this::refreshTable);
-        });
+        result.ifPresent(link -> personRepo.save(link.getPerson(), this::refreshTable));
     }
 
     private void handleDelete(Person p) {
@@ -375,14 +527,13 @@ public class OffenderListView {
         HBox titleRow = new HBox(12, warnIcon, titleLabel);
         titleRow.setAlignment(Pos.CENTER_LEFT);
 
+        String nationalId = (p.getNationalId() != null && !p.getNationalId().isBlank()) ? p.getNationalId() : "\u2014";
         Label detailLabel = new Label("This person will be soft-deleted from the system. " +
-            "Their record can be restored later if needed.\n\n" +
-            "National ID: " + or(p.getNationalId()));
+            "Their record can be restored later if needed.\n\nNational ID: " + nationalId);
         detailLabel.setWrapText(true);
         detailLabel.getStyleClass().add("text-muted");
 
         content.getChildren().addAll(titleRow, detailLabel);
-
         confirm.getDialogPane().setContent(content);
 
         ButtonType deleteType = new ButtonType("Delete", ButtonBar.ButtonData.OK_DONE);
