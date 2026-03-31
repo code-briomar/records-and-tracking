@@ -1,5 +1,23 @@
 # Release Notes
 
+## v0.1.14 - 2026-03-30
+
+### UI Redesign
+- **Case Management**: Completely redesigned with new card-based layout, stat summary cards (Total Active, Filed Today, Adjourned), inline search, and collapsible filter panel
+- **Persons Registry**: Redesigned to match case management — stat cards with week-over-week trend percentage, consistent search and pagination
+- **Dashboard**: Refreshed with four stat cards (Total Cases, Open, Closed, Persons on Record), redesigned quick-action cards, and "View All" shortcut on recent cases table
+- **Case form**: New cases default to OPEN status (no longer editable at creation); collapsible section colours unified; table now uses more vertical space
+
+### Bug Fixes
+- **Sync loop**: Fixed infinite push loop that kept re-syncing already-synced records; sync now correctly terminates after all pending items are pushed
+- **Offline indicator**: Sidebar sync status now shows the count of records pending upload when offline
+
+### Polish
+- Table header background refined for better contrast in dark mode
+- Consistent accent colours across all collapsible form sections
+
+---
+
 ## v0.1.13 - 2026-03-09
 
 ### Bug Fixes
