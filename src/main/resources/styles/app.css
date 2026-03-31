@@ -8,9 +8,20 @@
     -fx-padding: 8 14;
 }
 
+.table-view .column-header-background {
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+}
+
+.table-view .column-header {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+}
+
 .table-view .column-header .label {
-    -fx-padding: 8 14;
-    -fx-font-weight: 600;
+    -fx-padding: 9 14;
+    -fx-font-weight: 700;
+    -fx-font-size: 11px;
+    -fx-opacity: 0.9;
 }
 
 /* ---- Remove table outer border for cleaner look ---- */

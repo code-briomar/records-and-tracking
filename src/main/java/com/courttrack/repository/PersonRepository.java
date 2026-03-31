@@ -63,6 +63,14 @@ public class PersonRepository {
         });
     }
 
+    public void countAddedThisWeek(Consumer<Integer> onResult) {
+        executor.submit(() -> onResult.accept(dao.countAddedThisWeek()));
+    }
+
+    public void countAddedLastWeek(Consumer<Integer> onResult) {
+        executor.submit(() -> onResult.accept(dao.countAddedLastWeek()));
+    }
+
     public void search(String query, Consumer<List<Person>> onResult) {
         executor.submit(() -> {
             List<Person> result = dao.search(query);

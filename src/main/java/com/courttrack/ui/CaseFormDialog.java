@@ -266,13 +266,16 @@ public class CaseFormDialog extends Dialog<CourtCase> {
 
         caseGrid.add(fieldLabel("Case Type"), 0, r);
         caseGrid.add(caseTypeBox, 1, r);
-        caseGrid.add(fieldLabel("Priority"), 2, r);
-        caseGrid.add(priorityBox, 3, r++);
-
-        caseGrid.add(fieldLabel("Court ID"), 0, r);
-        caseGrid.add(courtIdField, 1, r);
         caseGrid.add(fieldLabel("Status"), 2, r);
-        caseGrid.add(statusBox, 3, r++);
+        if (existing != null) {
+            caseGrid.add(statusBox, 3, r++);
+        } else {
+            Label openBadge = new Label("OPEN");
+            openBadge.setStyle(
+                "-fx-background-color: " + tm.badgeOpenBg() + "; -fx-text-fill: " + tm.badgeOpenText() +
+                "; -fx-background-radius: 4; -fx-padding: 4 12; -fx-font-weight: bold;");
+            caseGrid.add(openBadge, 3, r++);
+        }
 
         caseGrid.add(fieldLabel("Court Name"), 0, r);
         GridPane.setColumnSpan(courtNameField, 3);
@@ -299,7 +302,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         chargeGrid.add(pleaBox, 1, crow);
         chargeGrid.add(fieldLabel("Verdict"), 2, crow);
         chargeGrid.add(verdictBox, 3, crow);
-        VBox chargeCard = buildCollapsibleCard("Charge Details", Feather.FILE_TEXT, tm.accentOrange(), chargeGrid, existing != null);
+        VBox chargeCard = buildCollapsibleCard("Charge Details", Feather.FILE_TEXT, tm.accentBlue(), chargeGrid, existing != null);
 
         // ================================================================
         // Section 3: Judgment & Sentencing
@@ -316,7 +319,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         judgmentGrid.add(fieldLabel("Mitigation"), 0, jrow);
         GridPane.setColumnSpan(mitigationNotesArea, 3);
         judgmentGrid.add(mitigationNotesArea, 1, jrow);
-        VBox judgmentCard = buildCollapsibleCard("Judgment & Sentencing", Feather.AWARD, tm.accentRed(), judgmentGrid, existing != null);
+        VBox judgmentCard = buildCollapsibleCard("Judgment & Sentencing", Feather.AWARD, tm.accentBlue(), judgmentGrid, existing != null);
 
         // ================================================================
         // Section 4: Additional Details
@@ -325,8 +328,10 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         int drow = 0;
         detailGrid.add(fieldLabel("Prosecutor"), 0, drow);
         detailGrid.add(prosecutionCounselField, 1, drow);
-        detailGrid.add(fieldLabel("Assistant"), 2, drow);
-        detailGrid.add(courtAssistantField, 3, drow++);
+        detailGrid.add(fieldLabel("Priority"), 2, drow);
+        detailGrid.add(priorityBox, 3, drow++);
+        detailGrid.add(fieldLabel("Assistant"), 0, drow);
+        detailGrid.add(courtAssistantField, 1, drow++);
         detailGrid.add(fieldLabel("Location"), 0, drow);
         GridPane.setColumnSpan(locationOfOffenceField, 3);
         detailGrid.add(locationOfOffenceField, 1, drow++);
@@ -336,7 +341,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         detailGrid.add(fieldLabel("Hearings"), 0, drow);
         GridPane.setColumnSpan(hearingDatesArea, 3);
         detailGrid.add(hearingDatesArea, 1, drow);
-        VBox detailCard = buildCollapsibleCard("Additional Details", Feather.INFO, tm.accentGreen(), detailGrid, existing != null);
+        VBox detailCard = buildCollapsibleCard("Additional Details", Feather.INFO, tm.accentBlue(), detailGrid, existing != null);
 
         // ================================================================
         // Section 5: Participants — collapsed by default
@@ -379,14 +384,14 @@ public class CaseFormDialog extends Dialog<CourtCase> {
             -fx-cursor: hand;
             -fx-font-size: 12px;
         """,
-            tm.isDark() ? "transparent" : "transparent",
-            tm.accentPurple(),
-            tm.accentPurple()));
+            "transparent",
+            tm.accentBlue(),
+            tm.accentBlue()));
 
         VBox participantsContent = new VBox(10, participantsHint, columnHeaders, participantsBox, addParticipantBtn);
         participantsContent.setPadding(new Insets(14, 20, 16, 20));
 
-        VBox participantsCard = buildCollapsibleCard("Participants", Feather.USERS, tm.accentPurple(), participantsContent, false);
+        VBox participantsCard = buildCollapsibleCard("Participants", Feather.USERS, tm.accentBlue(), participantsContent, false);
 
         // ================================================================
         // Assemble content

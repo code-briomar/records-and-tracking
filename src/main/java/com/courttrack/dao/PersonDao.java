@@ -197,6 +197,30 @@ public class PersonDao {
         return 0;
     }
 
+    public int countAddedThisWeek() {
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND created_at >= datetime('now', '-7 days')";
+        try (Connection conn = db.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            // created_at may not exist
+        }
+        return 0;
+    }
+
+    public int countAddedLastWeek() {
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')";
+        try (Connection conn = db.getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            if (rs.next()) return rs.getInt(1);
+        } catch (SQLException e) {
+            // created_at may not exist
+        }
+        return 0;
+    }
+
     private Person mapRow(ResultSet rs) throws SQLException {
         Person p = new Person(rs.getString("person_id"));
         p.setNationalId(rs.getString("national_id"));
