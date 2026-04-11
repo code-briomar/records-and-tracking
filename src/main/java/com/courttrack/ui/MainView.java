@@ -13,9 +13,6 @@ import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.repository.CaseRepository;
-
-import javafx.scene.input.KeyCode;
-import javafx.scene.input.KeyEvent;
 import com.courttrack.sync.SyncStatus;
 import com.courttrack.update.UpdateInfo;
 import com.courttrack.util.VersionPreferences;
@@ -32,6 +29,8 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
@@ -113,7 +112,7 @@ public class MainView {
             centerWrapper.getChildren().remove(updateBar);
             updateBar = null;
         });
-        centerWrapper.getChildren().addFirst(updateBar);
+        centerWrapper.getChildren().add(0, updateBar);
     }
 
     private VBox buildSidebar() {
@@ -123,10 +122,10 @@ public class MainView {
         sb.setMinWidth(width);
         sb.setMaxWidth(width);
         sb.setStyle(String.format("""
-            -fx-background-color: %s;
-            -fx-border-color: transparent %s transparent transparent;
-            -fx-border-width: 0 1 0 0;
-        """, tm.sidebarBg(), tm.sidebarSep()));
+                    -fx-background-color: %s;
+                    -fx-border-color: transparent %s transparent transparent;
+                    -fx-border-width: 0 1 0 0;
+                """, tm.sidebarBg(), tm.sidebarSep()));
 
         // --- Toggle button ---
         Button toggleBtn = new Button();
@@ -135,10 +134,10 @@ public class MainView {
         menuIcon.setIconColor(Color.web(tm.sidebarMuted()));
         toggleBtn.setGraphic(menuIcon);
         toggleBtn.setStyle("""
-            -fx-background-color: transparent;
-            -fx-cursor: hand;
-            -fx-padding: 8;
-        """);
+                    -fx-background-color: transparent;
+                    -fx-cursor: hand;
+                    -fx-padding: 8;
+                """);
         toggleBtn.setTooltip(new Tooltip(sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"));
         toggleBtn.setOnAction(e -> toggleSidebar());
 
@@ -158,9 +157,9 @@ public class MainView {
         logoIcon.setMinSize(36, 36);
         logoIcon.setMaxSize(36, 36);
         logoIcon.setStyle(String.format("""
-            -fx-background-color: %s;
-            -fx-background-radius: 8;
-        """, tm.accentBlue()));
+                    -fx-background-color: %s;
+                    -fx-background-radius: 8;
+                """, tm.accentBlue()));
         Label logoText = new Label("R&T");
         logoText.setFont(Font.font("System", FontWeight.BOLD, 14));
         logoText.setTextFill(Color.WHITE);
@@ -189,8 +188,7 @@ public class MainView {
         navSection.getChildren().addAll(
                 createNavButton("Dashboard", "dashboard", Feather.HOME),
                 createNavButton("Cases", "cases", Feather.FOLDER),
-                createNavButton("Offenders", "offenders", Feather.USERS)
-        );
+                createNavButton("Offenders", "offenders", Feather.USERS));
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
@@ -230,9 +228,9 @@ public class MainView {
         VBox userCard = new VBox(10);
         userCard.setPadding(new Insets(12));
         userCard.setStyle(String.format("""
-            -fx-background-color: %s;
-            -fx-background-radius: 8;
-        """, tm.sidebarActive()));
+                    -fx-background-color: %s;
+                    -fx-background-radius: 8;
+                """, tm.sidebarActive()));
 
         HBox userRow = new HBox(10);
         userRow.setAlignment(sidebarCollapsed ? Pos.CENTER : Pos.CENTER_LEFT);
@@ -241,9 +239,9 @@ public class MainView {
         userAvatar.setMinSize(32, 32);
         userAvatar.setMaxSize(32, 32);
         userAvatar.setStyle(String.format("""
-            -fx-background-color: %s;
-            -fx-background-radius: 16;
-        """, tm.accentPurple()));
+                    -fx-background-color: %s;
+                    -fx-background-radius: 16;
+                """, tm.accentPurple()));
         Label avatarInitials = new Label(username.substring(0, Math.min(2, username.length())).toUpperCase());
         avatarInitials.setFont(Font.font("System", FontWeight.BOLD, 12));
         avatarInitials.setTextFill(Color.WHITE);
@@ -266,15 +264,15 @@ public class MainView {
         logoutBtn = new Button("Sign Out");
         logoutBtn.setMaxWidth(Double.MAX_VALUE);
         logoutBtn.setStyle(String.format("""
-            -fx-background-color: transparent;
-            -fx-text-fill: %s;
-            -fx-border-color: %s;
-            -fx-border-radius: 6;
-            -fx-background-radius: 6;
-            -fx-padding: 6 12;
-            -fx-font-size: 12px;
-            -fx-cursor: hand;
-        """, tm.logoutText(), tm.sidebarSep()));
+                    -fx-background-color: transparent;
+                    -fx-text-fill: %s;
+                    -fx-border-color: %s;
+                    -fx-border-radius: 6;
+                    -fx-background-radius: 6;
+                    -fx-padding: 6 12;
+                    -fx-font-size: 12px;
+                    -fx-cursor: hand;
+                """, tm.logoutText(), tm.sidebarSep()));
         logoutBtn.setOnAction(e -> {
             VersionPreferences.getInstance().clearSession();
             onLogout.run();
@@ -323,11 +321,11 @@ public class MainView {
         Button syncBtn = new Button();
         syncBtn.setGraphic(syncBtnIcon);
         syncBtn.setStyle("""
-            -fx-background-color: transparent;
-            -fx-cursor: hand;
-            -fx-padding: 4;
-            -fx-background-radius: 4;
-        """);
+                    -fx-background-color: transparent;
+                    -fx-cursor: hand;
+                    -fx-padding: 4;
+                    -fx-background-radius: 4;
+                """);
         syncBtn.setTooltip(new Tooltip("Sync Now"));
         syncBtn.setOnAction(e -> {
             new Thread(() -> com.courttrack.sync.SyncCoordinator.getInstance().syncAll(true)).start();
@@ -522,7 +520,8 @@ public class MainView {
         addShortcutRow(shortcutsGrid, 4, "Ctrl + 3", "Go to Persons");
         addShortcutRow(shortcutsGrid, 5, "Escape", "Back / Close detail");
 
-        content.getChildren().addAll(header, sep, themeRow, new Separator(), sidebarRow, new Separator(), kbHeader, shortcutsGrid);
+        content.getChildren().addAll(header, sep, themeRow, new Separator(), sidebarRow, new Separator(), kbHeader,
+                shortcutsGrid);
 
         dialog.getDialogPane().setContent(content);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
@@ -535,9 +534,9 @@ public class MainView {
         Label keyLabel = new Label(keys);
         keyLabel.setFont(Font.font("System Mono", FontWeight.NORMAL, 11));
         keyLabel.setStyle(String.format(
-            "-fx-background-color: %s; -fx-border-color: %s; " +
-            "-fx-border-radius: 4; -fx-background-radius: 4; -fx-padding: 2 8 2 8;",
-            keyBg, keyBorder));
+                "-fx-background-color: %s; -fx-border-color: %s; " +
+                        "-fx-border-radius: 4; -fx-background-radius: 4; -fx-padding: 2 8 2 8;",
+                keyBg, keyBorder));
 
         Label actionLabel = new Label(action);
         actionLabel.setFont(Font.font("System", 12));
@@ -597,33 +596,33 @@ public class MainView {
 
     private String navActiveStyle() {
         return String.format("""
-            -fx-background-color: %s;
-            -fx-text-fill: %s;
-            -fx-font-size: 13px;
-            -fx-font-weight: bold;
-            -fx-cursor: hand;
-            -fx-background-radius: 6;
-        """, tm.sidebarActive(), tm.sidebarText());
+                    -fx-background-color: %s;
+                    -fx-text-fill: %s;
+                    -fx-font-size: 13px;
+                    -fx-font-weight: bold;
+                    -fx-cursor: hand;
+                    -fx-background-radius: 6;
+                """, tm.sidebarActive(), tm.sidebarText());
     }
 
     private String navHoverStyle() {
         return String.format("""
-            -fx-background-color: %s;
-            -fx-text-fill: %s;
-            -fx-font-size: 13px;
-            -fx-cursor: hand;
-            -fx-background-radius: 6;
-        """, tm.sidebarHover(), tm.sidebarText());
+                    -fx-background-color: %s;
+                    -fx-text-fill: %s;
+                    -fx-font-size: 13px;
+                    -fx-cursor: hand;
+                    -fx-background-radius: 6;
+                """, tm.sidebarHover(), tm.sidebarText());
     }
 
     private String navInactiveStyle() {
         return String.format("""
-            -fx-background-color: transparent;
-            -fx-text-fill: %s;
-            -fx-font-size: 13px;
-            -fx-cursor: hand;
-            -fx-background-radius: 6;
-        """, tm.sidebarMuted());
+                    -fx-background-color: transparent;
+                    -fx-text-fill: %s;
+                    -fx-font-size: 13px;
+                    -fx-cursor: hand;
+                    -fx-background-radius: 6;
+                """, tm.sidebarMuted());
     }
 
     private void navigateTo(String page) {
@@ -636,8 +635,7 @@ public class MainView {
             cachedDashboard = new DashboardView(
                     () -> navigateTo("cases"),
                     () -> navigateTo("offenders"),
-                    this::showCaseDetail
-            );
+                    this::showCaseDetail);
             cachedCases = new CaseListView(this::showCaseDetail);
             cachedOffenders = new OffenderListView(this::showPersonDetail);
 
@@ -651,8 +649,7 @@ public class MainView {
             contentArea.getChildren().addAll(
                     cachedDashboard.getRoot(),
                     cachedCases.getRoot(),
-                    cachedOffenders.getRoot()
-            );
+                    cachedOffenders.getRoot());
         }
 
         cachedDashboard.getRoot().setVisible(false);
@@ -739,17 +736,23 @@ public class MainView {
     public void registerKeyShortcuts(javafx.scene.Scene scene) {
         scene.addEventFilter(KeyEvent.KEY_PRESSED, e -> {
             if (e.isControlDown() && e.isShiftDown() && e.getCode() == KeyCode.N) {
-                openNewPersonDialog(); e.consume();
+                openNewPersonDialog();
+                e.consume();
             } else if (e.isControlDown() && e.getCode() == KeyCode.N) {
-                openNewCaseDialog(); e.consume();
+                openNewCaseDialog();
+                e.consume();
             } else if (e.getCode() == KeyCode.ESCAPE && showingDetail) {
-                onBack(); e.consume();
+                onBack();
+                e.consume();
             } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT1) {
-                navigateTo("dashboard"); e.consume();
+                navigateTo("dashboard");
+                e.consume();
             } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT2) {
-                navigateTo("cases"); e.consume();
+                navigateTo("cases");
+                e.consume();
             } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT3) {
-                navigateTo("offenders"); e.consume();
+                navigateTo("offenders");
+                e.consume();
             }
         });
     }
@@ -759,7 +762,8 @@ public class MainView {
         CaseFormDialog dialog = new CaseFormDialog(null);
         while (true) {
             Optional<CourtCase> result = dialog.showAndWait();
-            if (result.isEmpty()) break;
+            if (result.isEmpty())
+                break;
             CourtCase c = result.get();
             List<CaseFormDialog.ParticipantEntry> participants = dialog.getParticipantsToCreate();
             caseRepo.save(c, null, () -> {
@@ -770,20 +774,25 @@ public class MainView {
                 charge.setVerdict(c.getChargeVerdict());
                 caseRepo.saveCharge(charge, () -> saveParticipantsInBackground(c, participants));
             });
-            if (!dialog.isAddAnother()) break;
+            if (!dialog.isAddAnother())
+                break;
             dialog = new CaseFormDialog(null);
         }
-        if (cachedDashboard != null) cachedDashboard.refresh();
-        if (cachedCases != null) cachedCases.refresh();
+        if (cachedDashboard != null)
+            cachedDashboard.refresh();
+        if (cachedCases != null)
+            cachedCases.refresh();
     }
 
     private void saveParticipantsInBackground(CourtCase c, List<CaseFormDialog.ParticipantEntry> entries) {
-        if (entries.isEmpty()) return;
+        if (entries.isEmpty())
+            return;
         for (CaseFormDialog.ParticipantEntry entry : entries) {
             Person p = new Person();
             p.setFirstName(entry.firstName());
             p.setLastName(entry.lastName());
-            if (!entry.nationalId().isBlank()) p.setNationalId(entry.nationalId());
+            if (!entry.nationalId().isBlank())
+                p.setNationalId(entry.nationalId());
             new PersonDao().insert(p);
             CaseParticipant cp = new CaseParticipant();
             cp.setCaseId(c.getCaseId());
@@ -806,8 +815,10 @@ public class MainView {
                 cp.setRoleType("Accused");
                 new CaseDao().addParticipant(cp);
             }
-            if (cachedDashboard != null) cachedDashboard.refresh();
-            if (cachedOffenders != null) cachedOffenders.refresh();
+            if (cachedDashboard != null)
+                cachedDashboard.refresh();
+            if (cachedOffenders != null)
+                cachedOffenders.refresh();
         });
     }
 
