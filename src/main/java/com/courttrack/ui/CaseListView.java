@@ -720,12 +720,7 @@ public class CaseListView {
         confirm.setResultConverter(bt -> bt == deleteType);
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
-            caseRepo.getById(c.getCaseId(), courtCase -> {
-                if (courtCase != null) {
-                    courtCase.setDeleted(true);
-                    caseRepo.save(courtCase, null, this::refreshTable);
-                }
-            });
+            caseRepo.delete(c.getCaseId(), this::refreshTable);
         }
     }
 

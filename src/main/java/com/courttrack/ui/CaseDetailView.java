@@ -460,7 +460,7 @@ public class CaseDetailView {
         confirm.setResultConverter(bt -> bt == deleteType);
         Optional<Boolean> result = confirm.showAndWait();
         if (result.isPresent() && result.get()) {
-            caseRepo.delete(c.getCaseId(), onBack);
+            caseRepo.delete(c.getCaseId(), () -> Platform.runLater(onBack));
         }
     }
 
