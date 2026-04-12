@@ -7,15 +7,18 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.*;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
+import java.io.File;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,17 +27,15 @@ import java.util.Map;
 public class CaseFormDialog extends Dialog<CourtCase> {
 
     // ---------------------------------------------------------------
-    // Public types
+    // Public types (used by CaseListView)
     // ---------------------------------------------------------------
 
-    /** A person to be created and linked to the case on save. */
     public record ParticipantEntry(String firstName, String lastName,
                                    String nationalId, String roleType) {}
 
-    /** Inner class holding one participant row's fields. */
     private static final class ParticipantRow {
-        final TextField firstNameField = new TextField();
-        final TextField lastNameField  = new TextField();
+        final TextField firstNameField  = new TextField();
+        final TextField lastNameField   = new TextField();
         final TextField nationalIdField = new TextField();
         final ComboBox<String> roleBox;
         final HBox node;
@@ -42,485 +43,524 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         ParticipantRow(Runnable onDelete) {
             firstNameField.setPromptText("First name *");
             HBox.setHgrow(firstNameField, Priority.ALWAYS);
-
             lastNameField.setPromptText("Last name *");
             HBox.setHgrow(lastNameField, Priority.ALWAYS);
-
             nationalIdField.setPromptText("ID (optional)");
             nationalIdField.setPrefWidth(115);
-
             roleBox = new ComboBox<>(FXCollections.observableArrayList(
-                "Accused", "Witness", "Victim", "Complainant", "Other"
-            ));
-            roleBox.setPromptText("Role");
+                    "Accused", "Witness", "Victim", "Complainant", "Other"));
             roleBox.setValue("Accused");
             roleBox.setPrefWidth(130);
-
-            FontIcon delIcon = new FontIcon(Feather.X);
-            delIcon.setIconSize(13);
-            delIcon.setIconColor(Color.web("#eb5757"));
-            Button deleteBtn = new Button();
-            deleteBtn.setGraphic(delIcon);
-            deleteBtn.setStyle("""
-                -fx-background-color: transparent;
-                -fx-padding: 4;
-                -fx-cursor: hand;
-                -fx-background-radius: 4;
-            """);
-            deleteBtn.setOnAction(e -> onDelete.run());
-
-            node = new HBox(8, firstNameField, lastNameField, nationalIdField, roleBox, deleteBtn);
+            FontIcon x = new FontIcon(Feather.X);
+            x.setIconSize(13); x.setIconColor(Color.web("#eb5757"));
+            Button del = new Button(); del.setGraphic(x);
+            del.setStyle("-fx-background-color: transparent; -fx-padding: 4; -fx-cursor: hand;");
+            del.setOnAction(e -> onDelete.run());
+            node = new HBox(8, firstNameField, lastNameField, nationalIdField, roleBox, del);
             node.setAlignment(Pos.CENTER_LEFT);
         }
     }
 
     // ---------------------------------------------------------------
-    // Fields
+    // Category prefixes
     // ---------------------------------------------------------------
 
     private static final Map<String, String> CATEGORY_PREFIXES = Map.of(
-        "Civil", "CV-", "Criminal", "CR-", "Succession", "SC-",
-        "Children", "CH-", "Traffic", "TR-", "Other", "OT-"
-    );
+            "Civil", "CV-", "Criminal", "CR-", "Succession", "SC-",
+            "Children", "CH-", "Traffic", "TR-", "Other", "OT-");
 
-    // Section 1
-    private final TextField caseNumberField;
-    private final TextField caseTitleField;
-    private final ComboBox<String> categoryBox;
-    private final ComboBox<String> caseTypeBox;
-    private final ComboBox<String> statusBox;
-    private final ComboBox<String> priorityBox;
-    private final DatePicker filingDatePicker;
-    private final TextField courtIdField;
-    private final TextField courtNameField;
-    private final TextArea descriptionArea;
+    // ---------------------------------------------------------------
+    // Section 1 — Case Information (always open)
+    // ---------------------------------------------------------------
+    private final TextField     caseNumberField  = new TextField();
+    private final ComboBox<String> categoryBox   = new ComboBox<>(FXCollections.observableArrayList(
+            "Civil", "Criminal", "Succession", "Children", "Traffic", "Other"));
+    private final TextField     caseTitleField   = new TextField();
+    private final ComboBox<String> statusBox     = new ComboBox<>(FXCollections.observableArrayList(
+            "Active", "Closed", "Pending", "Review"));
+    private final DatePicker    filingDatePicker = new DatePicker();
 
-    // Section 2
-    private final TextArea chargeParticularsArea;
-    private final ComboBox<String> pleaBox;
-    private final ComboBox<String> verdictBox;
+    // ---------------------------------------------------------------
+    // Section 2 — Case Description
+    // ---------------------------------------------------------------
+    private final TextArea  descriptionArea      = new TextArea();
+    private final TextArea  evidenceSummaryArea  = new TextArea();
+    private final TextArea  chargeDescArea       = new TextArea();
+    private final TextField applicableLawField   = new TextField();
 
-    // Section 3
-    private final DatePicker judgmentDatePicker;
-    private final TextArea sentenceArea;
-    private final TextArea mitigationNotesArea;
-    private final ComboBox<String> appealStatusBox;
+    // ---------------------------------------------------------------
+    // Section 3 — Parties
+    // ---------------------------------------------------------------
+    private final TextField accusedNameField          = new TextField();
+    private final TextField complainantNameField      = new TextField();
+    private final TextField prosecutionCounselField   = new TextField();
+    private final TextField defenseWitnessesField     = new TextField();
+    private final TextField prosecutionWitnessesField = new TextField();
 
-    // Section 4
-    private final TextField prosecutionCounselField;
-    private final TextField courtAssistantField;
-    private final TextField locationOfOffenceField;
-    private final TextArea evidenceSummaryArea;
-    private final TextArea hearingDatesArea;
+    // ---------------------------------------------------------------
+    // Section 4 — Court Information
+    // ---------------------------------------------------------------
+    private final ComboBox<String> courtNameBox = new ComboBox<>(FXCollections.observableArrayList(
+            "Kilungu Law Courts", "Makueni Law Courts", "Machakos Law Courts",
+            "Nairobi Magistrates Court", "Mombasa Magistrates Court"));
+    private final ComboBox<String> judgeNameBox = new ComboBox<>(FXCollections.observableArrayList(
+            "Hon. R. Mutuku", "Hon. J. Mutua", "Hon. A. Wambua",
+            "Hon. M. Kioko", "Hon. P. Nzomo", "Hon. C. Mwangi",
+            "Hon. E. Njeru", "Hon. D. Mumo"));
+    private final DatePicker    judgmentDatePicker = new DatePicker();
+    private final TextField     courtAssistantField = new TextField();
 
-    // Participants
+    // ---------------------------------------------------------------
+    // Section 5 — Hearing
+    // ---------------------------------------------------------------
+    private final TextField hearingDatesField = new TextField();
+
+    // ---------------------------------------------------------------
+    // Section 6 — Outcome
+    // ---------------------------------------------------------------
+    private final ComboBox<String> verdictBox = new ComboBox<>(FXCollections.observableArrayList(
+            "", "Convicted", "Acquitted", "Judgment for Plaintiff",
+            "Judgment for Defendant", "Dismissed"));
+    private final TextArea  sentenceArea       = new TextArea();
+    private final TextArea  mitigationArea     = new TextArea();
+    private final ComboBox<String> appealStatusBox = new ComboBox<>(FXCollections.observableArrayList(
+            "None", "Pending", "Allowed", "Dismissed", "Withdrawn"));
+    private final TextArea  offenderHistoryArea = new TextArea();
+
+    // ---------------------------------------------------------------
+    // Section 7 — Documents
+    // ---------------------------------------------------------------
+    private final List<File> selectedDocuments = new ArrayList<>();
+    private VBox documentsListBox;
+
+    // ---------------------------------------------------------------
+    // Participants (kept for CaseListView compatibility)
+    // ---------------------------------------------------------------
     private final List<ParticipantRow> participantRows = new ArrayList<>();
     private VBox participantsBox;
 
     private boolean addAnother = false;
-    public boolean isAddAnother() { return addAnother; }
-
-    public List<ParticipantEntry> getParticipantsToCreate() {
-        return participantRows.stream()
-            .filter(r -> !r.firstNameField.getText().trim().isEmpty())
-            .map(r -> new ParticipantEntry(
-                r.firstNameField.getText().trim(),
-                r.lastNameField.getText().trim(),
-                r.nationalIdField.getText().trim(),
-                r.roleBox.getValue() != null ? r.roleBox.getValue() : "Accused"
-            ))
-            .toList();
-    }
-
     private final ThemeManager tm = ThemeManager.getInstance();
 
     // ---------------------------------------------------------------
-    // Constructor
+    // Public accessors
     // ---------------------------------------------------------------
 
+    public boolean isAddAnother() { return addAnother; }
+
+    public List<File> getSelectedDocuments() { return selectedDocuments; }
+
+    public List<ParticipantEntry> getParticipantsToCreate() {
+        return participantRows.stream()
+                .filter(r -> !r.firstNameField.getText().trim().isEmpty())
+                .map(r -> new ParticipantEntry(
+                        r.firstNameField.getText().trim(),
+                        r.lastNameField.getText().trim(),
+                        r.nationalIdField.getText().trim(),
+                        r.roleBox.getValue() != null ? r.roleBox.getValue() : "Accused"))
+                .toList();
+    }
+
+    // ================================================================
+    // Constructor
+    // ================================================================
+
     public CaseFormDialog(CourtCase existing) {
-        setTitle(existing == null ? "Add New Case" : "Edit Case");
+        setTitle(existing == null ? "New Case" : "Edit Case");
         setHeaderText(null);
         setResizable(true);
         initModality(Modality.APPLICATION_MODAL);
 
-        // ---- Field initialization ----
+        configureFields();
+        ColumnConstraints lbl1 = cc(115), fld1 = ccGrow(), lbl2 = cc(90), fld2 = ccGrow();
 
-        caseNumberField = new TextField();
-        caseNumberField.setPromptText("e.g., CR-009/2024");
-
-        caseTitleField = new TextField();
-        caseTitleField.setPromptText("e.g., Republic v. John Doe");
-
-        categoryBox = new ComboBox<>(FXCollections.observableArrayList(
-            "Civil", "Criminal", "Succession", "Children", "Traffic", "Other"
-        ));
-        categoryBox.setMaxWidth(Double.MAX_VALUE);
-        categoryBox.setPromptText("Select category");
-
-        caseTypeBox = new ComboBox<>(FXCollections.observableArrayList(
-            "Felony", "Misdemeanor", "Petty Offence", "Appeal", "Revision", "Judicial Review"
-        ));
-        caseTypeBox.setMaxWidth(Double.MAX_VALUE);
-        caseTypeBox.setPromptText("Select type");
-        caseTypeBox.setEditable(true);
-
-        statusBox = new ComboBox<>(FXCollections.observableArrayList(
-            "OPEN", "CLOSED", "ADJOURNED", "DISMISSED", "SETTLED"
-        ));
-        statusBox.setMaxWidth(Double.MAX_VALUE);
-
-        priorityBox = new ComboBox<>(FXCollections.observableArrayList("LOW", "MEDIUM", "HIGH"));
-        priorityBox.setMaxWidth(Double.MAX_VALUE);
-
-        filingDatePicker = new DatePicker();
-        filingDatePicker.setMaxWidth(Double.MAX_VALUE);
-
-        courtIdField = new TextField();
-        courtIdField.setPromptText("e.g., court-nairobi-mc");
-
-        courtNameField = new TextField();
-        courtNameField.setPromptText("e.g., Nairobi Magistrates Court");
-
-        descriptionArea = new TextArea();
-        descriptionArea.setPromptText("Brief description of the case...");
-        descriptionArea.setPrefRowCount(3);
-        descriptionArea.setWrapText(true);
-
-        chargeParticularsArea = new TextArea();
-        chargeParticularsArea.setPromptText("Describe the charge particulars...");
-        chargeParticularsArea.setPrefRowCount(3);
-        chargeParticularsArea.setWrapText(true);
-
-        pleaBox = new ComboBox<>(FXCollections.observableArrayList("", "Guilty", "Not Guilty"));
-        pleaBox.setMaxWidth(Double.MAX_VALUE);
-        pleaBox.setPromptText("Select plea");
-
-        verdictBox = new ComboBox<>(FXCollections.observableArrayList(
-            "", "CONVICTED", "ACQUITTED", "JUDGEMENT_FOR_PLAINTIFF", "JUDGEMENT_FOR_DEFENDANT", "DISMISSED"
-        ));
-        verdictBox.setMaxWidth(Double.MAX_VALUE);
-        verdictBox.setPromptText("Select verdict");
-
-        judgmentDatePicker = new DatePicker();
-        judgmentDatePicker.setMaxWidth(Double.MAX_VALUE);
-
-        sentenceArea = new TextArea();
-        sentenceArea.setPromptText("Sentence details...");
-        sentenceArea.setPrefRowCount(2);
-        sentenceArea.setWrapText(true);
-
-        mitigationNotesArea = new TextArea();
-        mitigationNotesArea.setPromptText("Mitigation notes...");
-        mitigationNotesArea.setPrefRowCount(2);
-        mitigationNotesArea.setWrapText(true);
-
-        appealStatusBox = new ComboBox<>(FXCollections.observableArrayList(
-            "", "NONE", "FILED", "HEARD", "ALLOWED", "DISMISSED"
-        ));
-        appealStatusBox.setMaxWidth(Double.MAX_VALUE);
-        appealStatusBox.setPromptText("Select appeal status");
-
-        prosecutionCounselField = new TextField();
-        prosecutionCounselField.setPromptText("Name of prosecution counsel");
-
-        courtAssistantField = new TextField();
-        courtAssistantField.setPromptText("Name of court assistant");
-
-        locationOfOffenceField = new TextField();
-        locationOfOffenceField.setPromptText("Location where offence occurred");
-
-        evidenceSummaryArea = new TextArea();
-        evidenceSummaryArea.setPromptText("Summary of evidence...");
-        evidenceSummaryArea.setPrefRowCount(3);
-        evidenceSummaryArea.setWrapText(true);
-
-        hearingDatesArea = new TextArea();
-        hearingDatesArea.setPromptText("Hearing dates (one per line)...");
-        hearingDatesArea.setPrefRowCount(2);
-        hearingDatesArea.setWrapText(true);
-
-        // ---- Column constraints ----
-        ColumnConstraints labelCol = new ColumnConstraints();
-        labelCol.setPrefWidth(110); labelCol.setMinWidth(110);
-        ColumnConstraints fieldCol = new ColumnConstraints();
-        fieldCol.setHgrow(Priority.ALWAYS);
-        ColumnConstraints labelCol2 = new ColumnConstraints();
-        labelCol2.setPrefWidth(90); labelCol2.setMinWidth(90);
-        ColumnConstraints fieldCol2 = new ColumnConstraints();
-        fieldCol2.setHgrow(Priority.ALWAYS);
-
-        // ================================================================
-        // Section 1: Case Information — permanent card
-        // ================================================================
-        GridPane caseGrid = buildGrid(labelCol, fieldCol, labelCol2, fieldCol2);
+        // ============================================================
+        // Section 1: Case Information — always open
+        // ============================================================
+        GridPane g1 = grid(lbl1, fld1, lbl2, fld2);
         int r = 0;
-        caseGrid.add(fieldLabel("Case Number *"), 0, r);
-        caseGrid.add(caseNumberField, 1, r);
-        caseGrid.add(fieldLabel("Category *"), 2, r);
-        caseGrid.add(categoryBox, 3, r++);
-
-        caseGrid.add(fieldLabel("Case Title"), 0, r);
+        g1.add(lbl("Case Number *"), 0, r); g1.add(caseNumberField, 1, r);
+        g1.add(lbl("Case Type *"),   2, r); g1.add(categoryBox,      3, r++);
+        g1.add(lbl("Case Title"),    0, r);
         GridPane.setColumnSpan(caseTitleField, 3);
-        caseGrid.add(caseTitleField, 1, r++);
+        g1.add(caseTitleField, 1, r++);
+        g1.add(lbl("Status *"),     0, r); g1.add(statusBox,        1, r);
+        g1.add(lbl("Date Filed *"), 2, r); g1.add(filingDatePicker,  3, r);
+        VBox sec1 = buildAlwaysOpenCard("Case Information", Feather.BRIEFCASE, g1);
 
-        caseGrid.add(fieldLabel("Case Type"), 0, r);
-        caseGrid.add(caseTypeBox, 1, r);
-        caseGrid.add(fieldLabel("Status"), 2, r);
-        if (existing != null) {
-            caseGrid.add(statusBox, 3, r++);
-        } else {
-            Label openBadge = new Label("OPEN");
-            openBadge.setStyle(
-                "-fx-background-color: " + tm.badgeOpenBg() + "; -fx-text-fill: " + tm.badgeOpenText() +
-                "; -fx-background-radius: 4; -fx-padding: 4 12; -fx-font-weight: bold;");
-            caseGrid.add(openBadge, 3, r++);
-        }
+        // ============================================================
+        // Section 2: Case Description
+        // ============================================================
+        GridPane g2 = grid(lbl1, fld1, lbl2, fld2);
+        r = 0;
+        g2.add(lbl("Description"), 0, r);
+        GridPane.setColumnSpan(descriptionArea, 3);   g2.add(descriptionArea, 1, r++);
+        g2.add(lbl("Evidence"),    0, r);
+        GridPane.setColumnSpan(evidenceSummaryArea, 3); g2.add(evidenceSummaryArea, 1, r++);
+        g2.add(lbl("Charges"),     0, r);
+        GridPane.setColumnSpan(chargeDescArea, 3);    g2.add(chargeDescArea, 1, r++);
+        g2.add(lbl("Applicable Law"), 0, r);
+        GridPane.setColumnSpan(applicableLawField, 3); g2.add(applicableLawField, 1, r);
+        VBox sec2 = buildCollapsibleCard("Case Description", Feather.FILE_TEXT, g2, existing != null);
 
-        caseGrid.add(fieldLabel("Court Name"), 0, r);
-        GridPane.setColumnSpan(courtNameField, 3);
-        caseGrid.add(courtNameField, 1, r++);
+        // ============================================================
+        // Section 3: Parties
+        // ============================================================
+        GridPane g3 = grid(lbl1, fld1, lbl2, fld2);
+        r = 0;
+        g3.add(lbl("Accused Name"), 0, r);
+        GridPane.setColumnSpan(accusedNameField, 3);  g3.add(accusedNameField, 1, r++);
+        g3.add(lbl("Complainant"), 0, r);
+        GridPane.setColumnSpan(complainantNameField, 3); g3.add(complainantNameField, 1, r++);
+        g3.add(lbl("Prosecutor"), 0, r);
+        GridPane.setColumnSpan(prosecutionCounselField, 3); g3.add(prosecutionCounselField, 1, r++);
+        g3.add(lbl("Defense Witnesses"), 0, r);
+        GridPane.setColumnSpan(defenseWitnessesField, 3); g3.add(defenseWitnessesField, 1, r++);
+        g3.add(lbl("Prosecution Witnesses"), 0, r);
+        GridPane.setColumnSpan(prosecutionWitnessesField, 3); g3.add(prosecutionWitnessesField, 1, r);
+        VBox sec3 = buildCollapsibleCard("Parties", Feather.USERS, g3, existing != null);
 
-        caseGrid.add(fieldLabel("Filing Date *"), 0, r);
-        caseGrid.add(filingDatePicker, 1, r++);
+        // ============================================================
+        // Section 4: Court Information
+        // ============================================================
+        GridPane g4 = grid(lbl1, fld1, lbl2, fld2);
+        r = 0;
+        g4.add(lbl("Court Name"),      0, r); g4.add(courtNameBox,      1, r);
+        g4.add(lbl("Judge / Magistrate"), 2, r); g4.add(judgeNameBox,  3, r++);
+        g4.add(lbl("Date of Judgment"), 0, r); g4.add(judgmentDatePicker, 1, r);
+        g4.add(lbl("Court Assistant"),  2, r); g4.add(courtAssistantField, 3, r);
+        VBox sec4 = buildCollapsibleCard("Court Information", Feather.AWARD, g4, existing != null);
 
-        caseGrid.add(fieldLabel("Description"), 0, r);
-        GridPane.setColumnSpan(descriptionArea, 3);
-        caseGrid.add(descriptionArea, 1, r);
+        // ============================================================
+        // Section 5: Hearing
+        // ============================================================
+        GridPane g5 = grid(lbl1, fld1, lbl2, fld2);
+        g5.add(lbl("Hearing Dates"), 0, 0);
+        GridPane.setColumnSpan(hearingDatesField, 3); g5.add(hearingDatesField, 1, 0);
+        VBox sec5 = buildCollapsibleCard("Hearing", Feather.CALENDAR, g5, existing != null);
 
-        VBox caseCard = buildFormCard("Case Information", Feather.BRIEFCASE, tm.accentBlue(), caseGrid);
+        // ============================================================
+        // Section 6: Outcome
+        // ============================================================
+        GridPane g6 = grid(lbl1, fld1, lbl2, fld2);
+        r = 0;
+        g6.add(lbl("Verdict"), 0, r); g6.add(verdictBox, 1, r);
+        g6.add(lbl("Appeal"),  2, r); g6.add(appealStatusBox, 3, r++);
+        g6.add(lbl("Sentence"), 0, r);
+        GridPane.setColumnSpan(sentenceArea, 3); g6.add(sentenceArea, 1, r++);
+        g6.add(lbl("Mitigation"), 0, r);
+        GridPane.setColumnSpan(mitigationArea, 3); g6.add(mitigationArea, 1, r++);
+        g6.add(lbl("Offender History"), 0, r);
+        GridPane.setColumnSpan(offenderHistoryArea, 3); g6.add(offenderHistoryArea, 1, r);
+        VBox sec6 = buildCollapsibleCard("Case Outcome", Feather.CHECK_SQUARE, g6, existing != null);
 
-        // ================================================================
-        // Section 2: Charge Details
-        // ================================================================
-        GridPane chargeGrid = buildGrid(labelCol, fieldCol, labelCol2, fieldCol2);
-        int crow = 0;
-        chargeGrid.add(fieldLabel("Particulars"), 0, crow);
-        GridPane.setColumnSpan(chargeParticularsArea, 3);
-        chargeGrid.add(chargeParticularsArea, 1, crow++);
-        chargeGrid.add(fieldLabel("Plea"), 0, crow);
-        chargeGrid.add(pleaBox, 1, crow);
-        chargeGrid.add(fieldLabel("Verdict"), 2, crow);
-        chargeGrid.add(verdictBox, 3, crow);
-        VBox chargeCard = buildCollapsibleCard("Charge Details", Feather.FILE_TEXT, tm.accentBlue(), chargeGrid, existing != null);
+        // ============================================================
+        // Section 7: Documents
+        // ============================================================
+        documentsListBox = new VBox(6);
+        Label docHint = new Label("Attach PDF, images, or Word documents.");
+        docHint.setStyle("-fx-text-fill: " + (tm.isDark() ? "#8a8a8a" : "#5a5a5a") + "; -fx-font-size: 12;");
+        Button browseBtn = new Button("+ Attach Files");
+        browseBtn.setStyle(String.format(
+                "-fx-background-color: transparent; -fx-text-fill: %s; -fx-border-color: %s;" +
+                "-fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 5 12; -fx-cursor: hand;",
+                tm.accentBlue(), tm.accentBlue()));
+        browseBtn.setOnAction(e -> openFilePicker());
+        VBox docContent = new VBox(10, docHint, browseBtn, documentsListBox);
+        docContent.setPadding(new Insets(14, 20, 16, 20));
+        VBox sec7 = buildCollapsibleCard("Documents", Feather.PAPERCLIP, docContent, false);
 
-        // ================================================================
-        // Section 3: Judgment & Sentencing
-        // ================================================================
-        GridPane judgmentGrid = buildGrid(labelCol, fieldCol, labelCol2, fieldCol2);
-        int jrow = 0;
-        judgmentGrid.add(fieldLabel("Judgment Date"), 0, jrow);
-        judgmentGrid.add(judgmentDatePicker, 1, jrow);
-        judgmentGrid.add(fieldLabel("Appeal"), 2, jrow);
-        judgmentGrid.add(appealStatusBox, 3, jrow++);
-        judgmentGrid.add(fieldLabel("Sentence"), 0, jrow);
-        GridPane.setColumnSpan(sentenceArea, 3);
-        judgmentGrid.add(sentenceArea, 1, jrow++);
-        judgmentGrid.add(fieldLabel("Mitigation"), 0, jrow);
-        GridPane.setColumnSpan(mitigationNotesArea, 3);
-        judgmentGrid.add(mitigationNotesArea, 1, jrow);
-        VBox judgmentCard = buildCollapsibleCard("Judgment & Sentencing", Feather.AWARD, tm.accentBlue(), judgmentGrid, existing != null);
-
-        // ================================================================
-        // Section 4: Additional Details
-        // ================================================================
-        GridPane detailGrid = buildGrid(labelCol, fieldCol, labelCol2, fieldCol2);
-        int drow = 0;
-        detailGrid.add(fieldLabel("Prosecutor"), 0, drow);
-        detailGrid.add(prosecutionCounselField, 1, drow);
-        detailGrid.add(fieldLabel("Priority"), 2, drow);
-        detailGrid.add(priorityBox, 3, drow++);
-        detailGrid.add(fieldLabel("Assistant"), 0, drow);
-        detailGrid.add(courtAssistantField, 1, drow++);
-        detailGrid.add(fieldLabel("Location"), 0, drow);
-        GridPane.setColumnSpan(locationOfOffenceField, 3);
-        detailGrid.add(locationOfOffenceField, 1, drow++);
-        detailGrid.add(fieldLabel("Evidence"), 0, drow);
-        GridPane.setColumnSpan(evidenceSummaryArea, 3);
-        detailGrid.add(evidenceSummaryArea, 1, drow++);
-        detailGrid.add(fieldLabel("Hearings"), 0, drow);
-        GridPane.setColumnSpan(hearingDatesArea, 3);
-        detailGrid.add(hearingDatesArea, 1, drow);
-        VBox detailCard = buildCollapsibleCard("Additional Details", Feather.INFO, tm.accentBlue(), detailGrid, existing != null);
-
-        // ================================================================
-        // Section 5: Participants — collapsed by default
-        // ================================================================
+        // ============================================================
+        // Participants
+        // ============================================================
         participantsBox = new VBox(8);
+        Button addPartBtn = new Button("+ Add Participant");
+        addPartBtn.setOnAction(e -> addParticipantRow());
+        addPartBtn.setStyle(String.format(
+                "-fx-background-color: transparent; -fx-text-fill: %s; -fx-border-color: %s;" +
+                "-fx-border-radius: 6; -fx-background-radius: 6; -fx-padding: 5 12; -fx-cursor: hand;",
+                tm.accentBlue(), tm.accentBlue()));
+        VBox partContent = new VBox(10, participantsBox, addPartBtn);
+        partContent.setPadding(new Insets(14, 20, 16, 20));
+        VBox sec8 = buildCollapsibleCard("Participants", Feather.USER_PLUS, partContent, false);
 
-        Label participantsHint = new Label(
-            "Add defendants, witnesses, or other persons. They will be saved and linked to this case automatically.");
-        participantsHint.setFont(Font.font("System", 12));
-        participantsHint.setStyle("-fx-text-fill: " + (tm.isDark() ? "#8a8a8a" : "#5a5a5a") + ";");
-        participantsHint.setWrapText(true);
-
-        // Column header row
-        Label hdrFirst = new Label("First Name");
-        Label hdrLast  = new Label("Last Name");
-        Label hdrId    = new Label("National ID");
-        Label hdrRole  = new Label("Role");
-        for (Label h : new Label[]{hdrFirst, hdrLast, hdrId, hdrRole}) {
-            h.setFont(Font.font("System", FontWeight.SEMI_BOLD, 11));
-            h.setStyle("-fx-text-fill: " + (tm.isDark() ? "#707070" : "#888888") + ";");
-        }
-        hdrFirst.setPrefWidth(Double.MAX_VALUE);
-        HBox.setHgrow(hdrFirst, Priority.ALWAYS);
-        hdrLast.setPrefWidth(Double.MAX_VALUE);
-        HBox.setHgrow(hdrLast, Priority.ALWAYS);
-        hdrId.setPrefWidth(115);
-        hdrRole.setPrefWidth(130);
-        Region hdrSpacer = new Region(); hdrSpacer.setPrefWidth(30);
-        HBox columnHeaders = new HBox(8, hdrFirst, hdrLast, hdrId, hdrRole, hdrSpacer);
-
-        Button addParticipantBtn = new Button("+ Add Participant");
-        addParticipantBtn.setOnAction(e -> addParticipantRow());
-        addParticipantBtn.setStyle(String.format("""
-            -fx-background-color: %s;
-            -fx-text-fill: %s;
-            -fx-border-color: %s;
-            -fx-border-radius: 6;
-            -fx-background-radius: 6;
-            -fx-padding: 5 12;
-            -fx-cursor: hand;
-            -fx-font-size: 12px;
-        """,
-            "transparent",
-            tm.accentBlue(),
-            tm.accentBlue()));
-
-        VBox participantsContent = new VBox(10, participantsHint, columnHeaders, participantsBox, addParticipantBtn);
-        participantsContent.setPadding(new Insets(14, 20, 16, 20));
-
-        VBox participantsCard = buildCollapsibleCard("Participants", Feather.USERS, tm.accentBlue(), participantsContent, false);
-
-        // ================================================================
-        // Assemble content
-        // ================================================================
-        VBox content = new VBox(10, caseCard, chargeCard, judgmentCard, detailCard, participantsCard);
+        // ============================================================
+        // Assemble scroll content
+        // ============================================================
+        String bg = tm.isDark() ? "#161616" : "#f4f4f4";
+        VBox content = new VBox(10, sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8);
         content.setPadding(new Insets(16));
-        content.setStyle("-fx-background-color: " + (tm.isDark() ? "#161616" : "#f4f4f4") + ";");
+        content.setStyle("-fx-background-color: " + bg + ";");
 
-        ScrollPane scrollPane = new ScrollPane(content);
-        scrollPane.setFitToWidth(true);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scrollPane.setPrefWidth(680);
-        scrollPane.setPrefHeight(600);
-        scrollPane.setStyle("-fx-background-color: " + (tm.isDark() ? "#161616" : "#f4f4f4") +
-                            "; -fx-background: " + (tm.isDark() ? "#161616" : "#f4f4f4") + ";");
+        ScrollPane scroll = new ScrollPane(content);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setPrefWidth(700);
+        scroll.setPrefHeight(590);
+        scroll.setStyle("-fx-background-color: " + bg + "; -fx-background: " + bg + ";");
 
-        // ================================================================
-        // Populate if editing
-        // ================================================================
+        // ============================================================
+        // Populate fields
+        // ============================================================
         if (existing != null) {
-            caseNumberField.setText(existing.getCaseNumber());
-            caseTitleField.setText(existing.getCaseTitle());
-            categoryBox.setValue(existing.getCaseCategory());
-            caseTypeBox.setValue(existing.getCaseType());
-            statusBox.setValue(existing.getCaseStatus());
-            priorityBox.setValue(existing.getPriority());
-            filingDatePicker.setValue(existing.getFilingDate());
-            courtIdField.setText(existing.getCourtId());
-            courtNameField.setText(existing.getCourtName());
-            descriptionArea.setText(existing.getDescription());
-            chargeParticularsArea.setText(existing.getChargeParticulars());
-            pleaBox.setValue(existing.getChargePlea());
-            verdictBox.setValue(existing.getChargeVerdict());
-            judgmentDatePicker.setValue(existing.getDateOfJudgment());
-            sentenceArea.setText(existing.getSentence());
-            mitigationNotesArea.setText(existing.getMitigationNotes());
-            appealStatusBox.setValue(existing.getAppealStatus());
-            prosecutionCounselField.setText(existing.getProsecutionCounsel());
-            courtAssistantField.setText(existing.getCourtAssistant());
-            locationOfOffenceField.setText(existing.getLocationOfOffence());
-            evidenceSummaryArea.setText(existing.getEvidenceSummary());
-            hearingDatesArea.setText(existing.getHearingDates());
+            populate(existing);
         } else {
-            statusBox.setValue("OPEN");
-            priorityBox.setValue("MEDIUM");
+            statusBox.setValue("Active");
             filingDatePicker.setValue(LocalDate.now());
+            courtNameBox.setValue("Kilungu Law Courts");
+            appealStatusBox.setValue("None");
         }
 
-        // Auto-prefix case number when category selected (new case only)
+        // Auto-prefix case number when category changes (new cases only)
         if (existing == null) {
-            categoryBox.valueProperty().addListener((obs, oldCat, newCat) -> {
-                if (newCat == null) return;
+            categoryBox.valueProperty().addListener((obs, old, nv) -> {
+                if (nv == null) return;
                 String cur = caseNumberField.getText();
-                boolean onlyPrefix = cur.isEmpty() || CATEGORY_PREFIXES.values().stream().anyMatch(cur::equals);
-                if (onlyPrefix) {
-                    String prefix = CATEGORY_PREFIXES.getOrDefault(newCat, "");
-                    caseNumberField.setText(prefix);
-                    caseNumberField.positionCaret(prefix.length());
+                boolean blank = cur.isEmpty() || CATEGORY_PREFIXES.values().stream().anyMatch(cur::equals);
+                if (blank) {
+                    String p = CATEGORY_PREFIXES.getOrDefault(nv, "");
+                    caseNumberField.setText(p);
+                    caseNumberField.positionCaret(p.length());
                 }
             });
         }
 
-        // ================================================================
+        // ============================================================
         // Dialog chrome
-        // ================================================================
-        getDialogPane().setContent(scrollPane);
+        // ============================================================
+        getDialogPane().setContent(scroll);
         ButtonType ADD_ANOTHER = new ButtonType("Save & Add Another", ButtonBar.ButtonData.LEFT);
         getDialogPane().getButtonTypes().addAll(ButtonType.OK, ADD_ANOTHER, ButtonType.CANCEL);
 
         Stage stage = (Stage) getDialogPane().getScene().getWindow();
-        stage.setMinWidth(840);
+        stage.setMinWidth(860);
         stage.setMinHeight(640);
 
-        Button okButton = (Button) getDialogPane().lookupButton(ButtonType.OK);
-        okButton.setText(existing == null ? "Add Case" : "Save Changes");
-        okButton.getStyleClass().add("accent");
+        Button okBtn = (Button) getDialogPane().lookupButton(ButtonType.OK);
+        okBtn.setText(existing == null ? "Add Case" : "Save Changes");
+        okBtn.getStyleClass().add("accent");
 
-        Button cancelButton = (Button) getDialogPane().lookupButton(ButtonType.CANCEL);
-        cancelButton.setText("Cancel");
-
-        javafx.event.EventHandler<javafx.event.ActionEvent> validationFilter = event -> {
+        javafx.event.EventHandler<javafx.event.ActionEvent> validate = ev -> {
             if (caseNumberField.getText().trim().isEmpty()) {
-                showValidationError("Case number is required."); event.consume();
+                alert("Case number is required."); ev.consume();
             } else if (categoryBox.getValue() == null) {
-                showValidationError("Category is required."); event.consume();
+                alert("Case type is required."); ev.consume();
+            } else if (statusBox.getValue() == null) {
+                alert("Status is required."); ev.consume();
             } else if (filingDatePicker.getValue() == null) {
-                showValidationError("Filing date is required."); event.consume();
+                alert("Filing date is required."); ev.consume();
             }
         };
-        okButton.addEventFilter(javafx.event.ActionEvent.ACTION, validationFilter);
-        Button addAnotherBtn = (Button) getDialogPane().lookupButton(ADD_ANOTHER);
-        addAnotherBtn.addEventFilter(javafx.event.ActionEvent.ACTION, validationFilter);
+        okBtn.addEventFilter(javafx.event.ActionEvent.ACTION, validate);
+        ((Button) getDialogPane().lookupButton(ADD_ANOTHER))
+                .addEventFilter(javafx.event.ActionEvent.ACTION, validate);
 
-        setResultConverter(buttonType -> {
-            if (buttonType == ButtonType.OK || buttonType == ADD_ANOTHER) {
-                addAnother = (buttonType == ADD_ANOTHER);
-                CourtCase c = existing != null ? existing : new CourtCase();
-                c.setCaseNumber(caseNumberField.getText().trim());
-                c.setCaseTitle(trimOrEmpty(caseTitleField.getText()));
-                c.setCaseCategory(categoryBox.getValue());
-                c.setCaseType(caseTypeBox.getValue());
-                c.setCaseStatus(statusBox.getValue());
-                c.setPriority(priorityBox.getValue());
-                c.setFilingDate(filingDatePicker.getValue());
-                c.setCourtId(trimOrEmpty(courtIdField.getText()));
-                c.setCourtName(trimOrEmpty(courtNameField.getText()));
-                c.setDescription(trimOrEmpty(descriptionArea.getText()));
-                c.setChargeParticulars(trimOrEmpty(chargeParticularsArea.getText()));
-                c.setChargePlea(nonBlankOrNull(pleaBox.getValue()));
-                c.setChargeVerdict(nonBlankOrNull(verdictBox.getValue()));
-                c.setDateOfJudgment(judgmentDatePicker.getValue());
-                c.setSentence(trimOrEmpty(sentenceArea.getText()));
-                c.setMitigationNotes(trimOrEmpty(mitigationNotesArea.getText()));
-                c.setAppealStatus(nonBlankOrNull(appealStatusBox.getValue()));
-                c.setProsecutionCounsel(trimOrEmpty(prosecutionCounselField.getText()));
-                c.setCourtAssistant(trimOrEmpty(courtAssistantField.getText()));
-                c.setLocationOfOffence(trimOrEmpty(locationOfOffenceField.getText()));
-                c.setEvidenceSummary(trimOrEmpty(evidenceSummaryArea.getText()));
-                c.setHearingDates(trimOrEmpty(hearingDatesArea.getText()));
-                return c;
+        setResultConverter(bt -> {
+            if (bt == ButtonType.OK || bt == ADD_ANOTHER) {
+                addAnother = bt == ADD_ANOTHER;
+                return buildCase(existing);
             }
             return null;
         });
 
-        Platform.runLater(() -> caseNumberField.requestFocus());
+        // Ctrl+Enter → save
+        getDialogPane().addEventFilter(javafx.scene.input.KeyEvent.KEY_PRESSED, e -> {
+            if (e.getCode() == KeyCode.ENTER && e.isControlDown()) {
+                okBtn.fire(); e.consume();
+            }
+        });
+
+        Platform.runLater(() -> {
+            caseNumberField.requestFocus();
+            setupEnterNav();
+        });
     }
 
     // ================================================================
-    // Participant row management
+    // Field configuration
+    // ================================================================
+
+    private void configureFields() {
+        caseNumberField.setPromptText("e.g. CR-009/2024");
+        categoryBox.setMaxWidth(Double.MAX_VALUE);
+        categoryBox.setPromptText("Select type");
+        caseTitleField.setPromptText("e.g. Republic v. John Doe");
+        statusBox.setMaxWidth(Double.MAX_VALUE);
+        filingDatePicker.setMaxWidth(Double.MAX_VALUE);
+
+        descriptionArea.setPromptText("Detailed case description...");
+        descriptionArea.setPrefRowCount(3); descriptionArea.setWrapText(true);
+        evidenceSummaryArea.setPromptText("Summary of evidence...");
+        evidenceSummaryArea.setPrefRowCount(3); evidenceSummaryArea.setWrapText(true);
+        chargeDescArea.setPromptText("Describe the charge...");
+        chargeDescArea.setPrefRowCount(3); chargeDescArea.setWrapText(true);
+        applicableLawField.setPromptText("e.g. Penal Code s. 304");
+
+        accusedNameField.setPromptText("Full name, including aliases");
+        complainantNameField.setPromptText("Complainant full name");
+        prosecutionCounselField.setPromptText("Prosecution counsel name");
+        defenseWitnessesField.setPromptText("Names separated by commas");
+        prosecutionWitnessesField.setPromptText("Names separated by commas");
+
+        courtNameBox.setEditable(true); courtNameBox.setMaxWidth(Double.MAX_VALUE);
+        judgeNameBox.setEditable(true); judgeNameBox.setMaxWidth(Double.MAX_VALUE);
+        judgeNameBox.setPromptText("Select or type name");
+        judgmentDatePicker.setMaxWidth(Double.MAX_VALUE);
+        courtAssistantField.setPromptText("Court assistant full name");
+
+        hearingDatesField.setPromptText("e.g. 2024-01-15, 2024-02-10");
+
+        verdictBox.setEditable(true); verdictBox.setMaxWidth(Double.MAX_VALUE);
+        verdictBox.setPromptText("Select or type verdict");
+        sentenceArea.setPromptText("Sentence details...");
+        sentenceArea.setPrefRowCount(2); sentenceArea.setWrapText(true);
+        mitigationArea.setPromptText("Mitigation notes...");
+        mitigationArea.setPrefRowCount(2); mitigationArea.setWrapText(true);
+        appealStatusBox.setMaxWidth(Double.MAX_VALUE);
+        offenderHistoryArea.setPromptText("Offender history...");
+        offenderHistoryArea.setPrefRowCount(2); offenderHistoryArea.setWrapText(true);
+    }
+
+    private void populate(CourtCase c) {
+        set(caseNumberField, c.getCaseNumber());
+        categoryBox.setValue(c.getCaseCategory());
+        set(caseTitleField, c.getCaseTitle());
+        statusBox.setValue(mapStatus(c.getCaseStatus()));
+        filingDatePicker.setValue(c.getFilingDate());
+
+        set(descriptionArea, c.getDescription());
+        set(evidenceSummaryArea, c.getEvidenceSummary());
+        set(chargeDescArea, c.getChargeParticulars());
+        set(applicableLawField, c.getApplicableLaw());
+
+        set(accusedNameField, c.getAccusedName());
+        set(complainantNameField, c.getComplainantName());
+        set(prosecutionCounselField, c.getProsecutionCounsel());
+        set(defenseWitnessesField, c.getDefenseWitnesses());
+        set(prosecutionWitnessesField, c.getProsecutionWitnesses());
+
+        courtNameBox.setValue(nvl(c.getCourtName(), "Kilungu Law Courts"));
+        judgeNameBox.setValue(c.getJudgeName());
+        judgmentDatePicker.setValue(c.getDateOfJudgment());
+        set(courtAssistantField, c.getCourtAssistant());
+
+        set(hearingDatesField, c.getHearingDates());
+
+        verdictBox.setValue(mapVerdict(c.getChargeVerdict()));
+        set(sentenceArea, c.getSentence());
+        set(mitigationArea, c.getMitigationNotes());
+        appealStatusBox.setValue(mapAppeal(c.getAppealStatus()));
+        set(offenderHistoryArea, c.getOffenderHistory());
+    }
+
+    private CourtCase buildCase(CourtCase existing) {
+        CourtCase c = existing != null ? existing : new CourtCase();
+        c.setCaseNumber(caseNumberField.getText().trim());
+        c.setCaseCategory(categoryBox.getValue());
+        c.setCaseTitle(trim(caseTitleField.getText()));
+        c.setCaseStatus(statusBox.getValue());
+        c.setFilingDate(filingDatePicker.getValue());
+
+        c.setDescription(trim(descriptionArea.getText()));
+        c.setEvidenceSummary(trim(evidenceSummaryArea.getText()));
+        c.setChargeParticulars(trim(chargeDescArea.getText()));
+        c.setApplicableLaw(trim(applicableLawField.getText()));
+
+        c.setAccusedName(trim(accusedNameField.getText()));
+        c.setComplainantName(trim(complainantNameField.getText()));
+        c.setProsecutionCounsel(trim(prosecutionCounselField.getText()));
+        c.setDefenseWitnesses(trim(defenseWitnessesField.getText()));
+        c.setProsecutionWitnesses(trim(prosecutionWitnessesField.getText()));
+
+        c.setCourtName(nvl(courtNameBox.getEditor().getText().trim(), "Kilungu Law Courts"));
+        String judgeText = judgeNameBox.getEditor().getText().trim();
+        c.setJudgeName(judgeText.isEmpty() ? null : judgeText);
+        c.setDateOfJudgment(judgmentDatePicker.getValue());
+        c.setCourtAssistant(trim(courtAssistantField.getText()));
+
+        c.setHearingDates(trim(hearingDatesField.getText()));
+
+        String v = verdictBox.getEditor().getText().trim();
+        c.setChargeVerdict(v.isEmpty() ? null : v);
+        c.setSentence(trim(sentenceArea.getText()));
+        c.setMitigationNotes(trim(mitigationArea.getText()));
+        String appeal = appealStatusBox.getValue();
+        c.setAppealStatus("None".equals(appeal) || appeal == null ? null : appeal);
+        c.setOffenderHistory(trim(offenderHistoryArea.getText()));
+
+        return c;
+    }
+
+    // ================================================================
+    // Enter key navigation (TextFields only — TextAreas keep Enter=newline)
+    // ================================================================
+
+    private void setupEnterNav() {
+        List<TextField> nav = List.of(
+                caseNumberField,
+                caseTitleField,
+                filingDatePicker.getEditor(),
+                applicableLawField,
+                accusedNameField, complainantNameField, prosecutionCounselField,
+                defenseWitnessesField, prosecutionWitnessesField,
+                courtNameBox.getEditor(),
+                judgeNameBox.getEditor(),
+                judgmentDatePicker.getEditor(),
+                courtAssistantField,
+                hearingDatesField,
+                verdictBox.getEditor()
+        );
+        for (int i = 0; i < nav.size() - 1; i++) {
+            final TextField next = nav.get(i + 1);
+            nav.get(i).setOnAction(e -> next.requestFocus());
+        }
+    }
+
+    // ================================================================
+    // Document picker
+    // ================================================================
+
+    private void openFilePicker() {
+        FileChooser fc = new FileChooser();
+        fc.setTitle("Select Case Documents");
+        fc.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("All Supported", "*.pdf", "*.png", "*.jpg", "*.jpeg", "*.docx", "*.doc"),
+                new FileChooser.ExtensionFilter("PDF Files", "*.pdf"),
+                new FileChooser.ExtensionFilter("Images", "*.png", "*.jpg", "*.jpeg"),
+                new FileChooser.ExtensionFilter("Word Documents", "*.docx", "*.doc")
+        );
+        Stage stage = (Stage) getDialogPane().getScene().getWindow();
+        List<File> files = fc.showOpenMultipleDialog(stage);
+        if (files == null) return;
+        for (File f : files) {
+            if (!selectedDocuments.contains(f)) {
+                selectedDocuments.add(f);
+                addDocRow(f);
+            }
+        }
+    }
+
+    private void addDocRow(File f) {
+        FontIcon icon = new FontIcon(Feather.FILE);
+        icon.setIconSize(12); icon.setIconColor(Color.web(tm.accentBlue()));
+        Label name = new Label(f.getName());
+        name.setStyle("-fx-font-size: 12;");
+        HBox.setHgrow(name, Priority.ALWAYS);
+        FontIcon x = new FontIcon(Feather.X);
+        x.setIconSize(11); x.setIconColor(Color.web("#eb5757"));
+        Button removeBtn = new Button(); removeBtn.setGraphic(x);
+        removeBtn.setStyle("-fx-background-color: transparent; -fx-padding: 2 4; -fx-cursor: hand;");
+        HBox row = new HBox(6, icon, name, removeBtn);
+        row.setAlignment(Pos.CENTER_LEFT);
+        removeBtn.setOnAction(e -> {
+            selectedDocuments.remove(f);
+            documentsListBox.getChildren().remove(row);
+        });
+        documentsListBox.getChildren().add(row);
+    }
+
+    // ================================================================
+    // Participant rows
     // ================================================================
 
     private void addParticipantRow() {
@@ -538,134 +578,176 @@ public class CaseFormDialog extends Dialog<CourtCase> {
     // Card builders
     // ================================================================
 
-    private VBox buildFormCard(String title, Feather icon, String color, GridPane grid) {
-        String bg     = tm.isDark() ? "#1e1e1e" : "#ffffff";
+    private VBox buildAlwaysOpenCard(String title, Feather icon, Node content) {
+        String bg = tm.isDark() ? "#1e1e1e" : "#ffffff";
         String border = tm.isDark() ? "#383838" : "#dedede";
 
         VBox card = new VBox(0);
         card.setStyle(String.format(
-            "-fx-background-color: %s; -fx-border-color: %s; " +
-            "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", bg, border));
+                "-fx-background-color: %s; -fx-border-color: %s;" +
+                "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", bg, border));
 
-        Region accent = new Region();
-        accent.setPrefWidth(3); accent.setMinWidth(3);
-        accent.setStyle(String.format("-fx-background-color: %s; -fx-background-radius: 2 0 0 0;", color));
+        Region accent = accentBar(tm.accentBlue());
+        FontIcon fi = new FontIcon(icon); fi.setIconSize(14); fi.setIconColor(Color.web(tm.accentBlue()));
+        Label label = new Label(title); label.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
 
-        FontIcon fi = new FontIcon(icon);
-        fi.setIconSize(14);
-        fi.setIconColor(Color.web(color));
+        HBox inner = new HBox(8, fi, label);
+        inner.setAlignment(Pos.CENTER_LEFT);
+        inner.setPadding(new Insets(11, 14, 9, 12));
+        HBox.setHgrow(inner, Priority.ALWAYS);
 
-        Label label = new Label(title);
-        label.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-
-        HBox headerInner = new HBox(8, fi, label);
-        headerInner.setAlignment(Pos.CENTER_LEFT);
-        headerInner.setPadding(new Insets(11, 16, 9, 12));
-        HBox.setHgrow(headerInner, Priority.ALWAYS);
-
-        HBox header = new HBox(0, accent, headerInner);
+        HBox header = new HBox(0, accent, inner);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setStyle(String.format(
-            "-fx-border-color: transparent transparent %s transparent; " +
-            "-fx-border-width: 0 0 1 0; -fx-background-radius: 8 8 0 0;", border));
+                "-fx-border-color: transparent transparent %s transparent;" +
+                "-fx-border-width: 0 0 1 0; -fx-background-radius: 8 8 0 0;", border));
 
-        card.getChildren().addAll(header, grid);
+        card.getChildren().addAll(header, content);
         return card;
     }
 
-    private VBox buildCollapsibleCard(String title, Feather icon, String color, Node content, boolean expanded) {
-        String bg        = tm.isDark() ? "#1e1e1e" : "#ffffff";
-        String border    = tm.isDark() ? "#383838" : "#dedede";
-        String mutedClr  = tm.isDark() ? "#5a5a5a" : "#aaaaaa";
-        String hoverBg   = tm.isDark() ? "#ffffff07" : "#0000000a";
+    private VBox buildCollapsibleCard(String title, Feather icon, Node content, boolean expanded) {
+        String bg = tm.isDark() ? "#1e1e1e" : "#ffffff";
+        String border = tm.isDark() ? "#383838" : "#dedede";
+        String muted = tm.isDark() ? "#5a5a5a" : "#aaaaaa";
+        String hover = tm.isDark() ? "#ffffff07" : "#0000000a";
 
         VBox card = new VBox(0);
         card.setStyle(String.format(
-            "-fx-background-color: %s; -fx-border-color: %s; " +
-            "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", bg, border));
+                "-fx-background-color: %s; -fx-border-color: %s;" +
+                "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", bg, border));
 
-        Region accent = new Region();
-        accent.setPrefWidth(3); accent.setMinWidth(3);
-        accent.setStyle(String.format("-fx-background-color: %s; -fx-background-radius: 2 0 0 0;", color));
+        Region accent = accentBar(tm.accentBlue());
+        FontIcon fi = new FontIcon(icon); fi.setIconSize(14); fi.setIconColor(Color.web(tm.accentBlue()));
+        Label titleLabel = new Label(title); titleLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+        FontIcon arrow = new FontIcon(expanded ? Feather.CHEVRON_UP : Feather.CHEVRON_DOWN);
+        arrow.setIconSize(13); arrow.setIconColor(Color.web(muted));
+        Region spacer = new Region(); HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        FontIcon fi = new FontIcon(icon);
-        fi.setIconSize(14);
-        fi.setIconColor(Color.web(color));
+        HBox inner = new HBox(8, fi, titleLabel, spacer, arrow);
+        inner.setAlignment(Pos.CENTER_LEFT);
+        inner.setPadding(new Insets(11, 14, 9, 12));
+        HBox.setHgrow(inner, Priority.ALWAYS);
 
-        Label titleLabel = new Label(title);
-        titleLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-
-        FontIcon arrowIcon = new FontIcon(expanded ? Feather.CHEVRON_UP : Feather.CHEVRON_DOWN);
-        arrowIcon.setIconSize(13);
-        arrowIcon.setIconColor(Color.web(mutedClr));
-
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
-
-        String expandedStyle  = String.format(
-            "-fx-cursor: hand; -fx-border-color: transparent transparent %s transparent; " +
-            "-fx-border-width: 0 0 1 0; -fx-background-radius: 8 8 0 0;", border);
-        String collapsedStyle = "-fx-cursor: hand; -fx-border-color: transparent; -fx-border-width: 0; -fx-background-radius: 8;";
-
-        HBox headerInner = new HBox(8, fi, titleLabel, spacer, arrowIcon);
-        headerInner.setAlignment(Pos.CENTER_LEFT);
-        headerInner.setPadding(new Insets(11, 14, 9, 12));
-        HBox.setHgrow(headerInner, Priority.ALWAYS);
-
-        HBox header = new HBox(0, accent, headerInner);
+        HBox header = new HBox(0, accent, inner);
         header.setAlignment(Pos.CENTER_LEFT);
-        header.setStyle(expanded ? expandedStyle : collapsedStyle);
 
-        content.setVisible(expanded);
-        content.setManaged(expanded);
+        String expStyle = String.format(
+                "-fx-cursor: hand; -fx-border-color: transparent transparent %s transparent;" +
+                "-fx-border-width: 0 0 1 0; -fx-background-radius: 8 8 0 0;", border);
+        String colStyle = "-fx-cursor: hand; -fx-border-color: transparent; -fx-background-radius: 8;";
+
+        boolean[] open = {expanded};
+        content.setVisible(open[0]); content.setManaged(open[0]);
+        header.setStyle(open[0] ? expStyle : colStyle);
 
         header.setOnMouseClicked(e -> {
-            boolean now = !content.isVisible();
-            content.setVisible(now);
-            content.setManaged(now);
-            arrowIcon.setIconCode(now ? Feather.CHEVRON_UP : Feather.CHEVRON_DOWN);
-            header.setStyle(now ? expandedStyle : collapsedStyle);
+            open[0] = !open[0];
+            content.setVisible(open[0]); content.setManaged(open[0]);
+            arrow.setIconCode(open[0] ? Feather.CHEVRON_UP : Feather.CHEVRON_DOWN);
+            header.setStyle(open[0] ? expStyle : colStyle);
         });
         header.setOnMouseEntered(e -> header.setStyle(
-            (content.isVisible() ? expandedStyle : collapsedStyle) + " -fx-background-color: " + hoverBg + ";"));
-        header.setOnMouseExited(e ->
-            header.setStyle(content.isVisible() ? expandedStyle : collapsedStyle));
+                (open[0] ? expStyle : colStyle) + " -fx-background-color: " + hover + ";"));
+        header.setOnMouseExited(e -> header.setStyle(open[0] ? expStyle : colStyle));
 
         card.getChildren().addAll(header, content);
         return card;
     }
 
     // ================================================================
-    // Helpers
+    // Layout helpers
     // ================================================================
 
-    private GridPane buildGrid(ColumnConstraints... cols) {
-        GridPane grid = new GridPane();
-        grid.setHgap(14);
-        grid.setVgap(11);
-        grid.setPadding(new Insets(14, 20, 16, 20));
-        grid.getColumnConstraints().addAll(cols);
-        return grid;
+    private GridPane grid(ColumnConstraints... cols) {
+        GridPane g = new GridPane();
+        g.setHgap(14); g.setVgap(11);
+        g.setPadding(new Insets(14, 20, 16, 20));
+        g.getColumnConstraints().addAll(cols);
+        return g;
     }
 
-    private Label fieldLabel(String text) {
-        Label label = new Label(text);
-        label.setFont(Font.font("System", FontWeight.NORMAL, 12));
-        label.setStyle("-fx-text-fill: " + (tm.isDark() ? "#8a8a8a" : "#5a5a5a") + ";");
-        return label;
+    private ColumnConstraints cc(double w) {
+        ColumnConstraints c = new ColumnConstraints();
+        c.setPrefWidth(w); c.setMinWidth(w); return c;
     }
 
-    private static String trimOrEmpty(String s) { return s == null ? "" : s.trim(); }
-
-    private static String nonBlankOrNull(String s) {
-        return (s != null && !s.isBlank()) ? s : null;
+    private ColumnConstraints ccGrow() {
+        ColumnConstraints c = new ColumnConstraints();
+        c.setHgrow(Priority.ALWAYS); return c;
     }
 
-    private void showValidationError(String message) {
-        Alert alert = new Alert(Alert.AlertType.WARNING);
-        alert.setTitle("Validation");
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
+    private Label lbl(String text) {
+        Label l = new Label(text);
+        l.setFont(Font.font("System", FontWeight.NORMAL, 12));
+        l.setStyle("-fx-text-fill: " + (tm.isDark() ? "#8a8a8a" : "#5a5a5a") + ";");
+        return l;
+    }
+
+    private Region accentBar(String color) {
+        Region r = new Region();
+        r.setPrefWidth(3); r.setMinWidth(3);
+        r.setStyle(String.format("-fx-background-color: %s; -fx-background-radius: 2 0 0 0;", color));
+        return r;
+    }
+
+    // ================================================================
+    // Value mapping (old → new format)
+    // ================================================================
+
+    private static String mapStatus(String s) {
+        if (s == null) return "Active";
+        return switch (s) {
+            case "OPEN"      -> "Active";
+            case "CLOSED"    -> "Closed";
+            case "ADJOURNED" -> "Pending";
+            case "DISMISSED" -> "Closed";
+            case "SETTLED"   -> "Closed";
+            default          -> s; // already new format
+        };
+    }
+
+    private static String mapVerdict(String v) {
+        if (v == null) return "";
+        return switch (v) {
+            case "CONVICTED"               -> "Convicted";
+            case "ACQUITTED"               -> "Acquitted";
+            case "JUDGEMENT_FOR_PLAINTIFF" -> "Judgment for Plaintiff";
+            case "JUDGEMENT_FOR_DEFENDANT" -> "Judgment for Defendant";
+            case "DISMISSED"               -> "Dismissed";
+            default                        -> v;
+        };
+    }
+
+    private static String mapAppeal(String a) {
+        if (a == null || a.isBlank()) return "None";
+        return switch (a) {
+            case "NONE"    -> "None";
+            case "FILED"   -> "Pending";
+            case "HEARD"   -> "Pending";
+            case "ALLOWED" -> "Allowed";
+            case "DISMISSED" -> "Dismissed";
+            default        -> a;
+        };
+    }
+
+    // ================================================================
+    // String helpers
+    // ================================================================
+
+    private static String trim(String s) { return s == null ? "" : s.trim(); }
+
+    private static String nvl(String s, String def) {
+        return (s != null && !s.isBlank()) ? s : def;
+    }
+
+    private static void set(TextInputControl t, String v) {
+        if (v != null) t.setText(v);
+    }
+
+    private void alert(String msg) {
+        Alert a = new Alert(Alert.AlertType.WARNING);
+        a.setTitle("Validation"); a.setHeaderText(null); a.setContentText(msg);
+        a.showAndWait();
     }
 }

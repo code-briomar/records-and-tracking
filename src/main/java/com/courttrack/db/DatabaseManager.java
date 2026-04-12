@@ -394,6 +394,15 @@ public class DatabaseManager {
         // charge new columns
         safeAddColumn(stmt, "charge", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
         safeAddColumn(stmt, "charge", "updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+
+        // court_case v2 fields
+        safeAddColumn(stmt, "court_case", "accused_name", "TEXT");
+        safeAddColumn(stmt, "court_case", "complainant_name", "VARCHAR(255)");
+        safeAddColumn(stmt, "court_case", "defense_witnesses", "TEXT");
+        safeAddColumn(stmt, "court_case", "prosecution_witnesses", "TEXT");
+        safeAddColumn(stmt, "court_case", "applicable_law", "TEXT");
+        safeAddColumn(stmt, "court_case", "judge_name", "VARCHAR(255)");
+        safeAddColumn(stmt, "court_case", "offender_history", "TEXT");
     }
 
     private void safeAddColumn(Statement stmt, String table, String column, String type) {

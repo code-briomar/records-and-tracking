@@ -165,8 +165,10 @@ public class CaseDao {
             INSERT INTO court_case (case_id, case_number, case_title, court_id, court_name, filing_date,
                 case_status, case_category, case_type, priority, description, date_of_judgment,
                 sentence, mitigation_notes, prosecution_counsel, appeal_status, location_of_offence,
-                evidence_summary, hearing_dates, court_assistant)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                evidence_summary, hearing_dates, court_assistant,
+                accused_name, complainant_name, defense_witnesses, prosecution_witnesses,
+                applicable_law, judge_name, offender_history)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """;
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -190,6 +192,13 @@ public class CaseDao {
             ps.setString(18, c.getEvidenceSummary());
             ps.setString(19, c.getHearingDates());
             ps.setString(20, c.getCourtAssistant());
+            ps.setString(21, c.getAccusedName());
+            ps.setString(22, c.getComplainantName());
+            ps.setString(23, c.getDefenseWitnesses());
+            ps.setString(24, c.getProsecutionWitnesses());
+            ps.setString(25, c.getApplicableLaw());
+            ps.setString(26, c.getJudgeName());
+            ps.setString(27, c.getOffenderHistory());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOGGER.severe("Database error: " + e.getMessage());
@@ -203,7 +212,9 @@ public class CaseDao {
             description = ?, date_of_judgment = ?, sentence = ?, mitigation_notes = ?,
             prosecution_counsel = ?, appeal_status = ?, location_of_offence = ?,
             evidence_summary = ?, hearing_dates = ?, court_assistant = ?,
-            updated_at = CURRENT_TIMESTAMP
+            accused_name = ?, complainant_name = ?, defense_witnesses = ?, prosecution_witnesses = ?,
+            applicable_law = ?, judge_name = ?, offender_history = ?,
+            has_changes = TRUE, updated_at = CURRENT_TIMESTAMP
             WHERE case_id = ?
         """;
         try (Connection conn = db.getConnection();
@@ -227,7 +238,14 @@ public class CaseDao {
             ps.setString(17, c.getEvidenceSummary());
             ps.setString(18, c.getHearingDates());
             ps.setString(19, c.getCourtAssistant());
-            ps.setString(20, c.getCaseId());
+            ps.setString(20, c.getAccusedName());
+            ps.setString(21, c.getComplainantName());
+            ps.setString(22, c.getDefenseWitnesses());
+            ps.setString(23, c.getProsecutionWitnesses());
+            ps.setString(24, c.getApplicableLaw());
+            ps.setString(25, c.getJudgeName());
+            ps.setString(26, c.getOffenderHistory());
+            ps.setString(27, c.getCaseId());
             ps.executeUpdate();
         } catch (SQLException e) {
             LOGGER.severe("Database error: " + e.getMessage());
@@ -434,6 +452,64 @@ public class CaseDao {
         c.setChargeVerdict(rs.getString("charge_verdict"));
         c.setChargePlea(rs.getString("charge_plea"));
         c.setSentenceNotes(rs.getString("sentence_notes"));
+        try { c.setAccusedName(rs.getString("accused_name")); } catch (SQLException ignored) {}
+        try { c.setComplainantName(rs.getString("complainant_name")); } catch (SQLException ignored) {}
+        try { c.setDefenseWitnesses(rs.getString("defense_witnesses")); } catch (SQLException ignored) {}
+        try { c.setProsecutionWitnesses(rs.getString("prosecution_witnesses")); } catch (SQLException ignored) {}
+        try { c.setApplicableLaw(rs.getString("applicable_law")); } catch (SQLException ignored) {}
+        try { c.setJudgeName(rs.getString("judge_name")); } catch (SQLException ignored) {}
+        try { c.setOffenderHistory(rs.getString("offender_history")); } catch (SQLException ignored) {}
         return c;
+    }
+
+    // --- Documents ---
+
+    public void insertDocument(com.courttrack.model.CaseDocument doc) {
+        String sql = "INSERT INTO case_document (document_id, case_id, name, mime_type, local_path, file_size, upload_date) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, doc.getDocumentId());
+            ps.setString(2, doc.getCaseId());
+            ps.setString(3, doc.getName());
+            ps.setString(4, doc.getMimeType());
+            ps.setString(5, doc.getLocalPath());
+            ps.setLong(6, doc.getFileSize());
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOGGER.severe("Error inserting document: " + e.getMessage());
+        }
+    }
+
+    public List<com.courttrack.model.CaseDocument> getDocuments(String caseId) {
+        List<com.courttrack.model.CaseDocument> list = new ArrayList<>();
+        String sql = "SELECT * FROM case_document WHERE case_id = ? ORDER BY upload_date DESC";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, caseId);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                com.courttrack.model.CaseDocument doc = new com.courttrack.model.CaseDocument(rs.getString("document_id"));
+                doc.setCaseId(rs.getString("case_id"));
+                doc.setName(rs.getString("name"));
+                doc.setMimeType(rs.getString("mime_type"));
+                doc.setLocalPath(rs.getString("local_path"));
+                doc.setFileSize(rs.getLong("file_size"));
+                list.add(doc);
+            }
+        } catch (SQLException e) {
+            LOGGER.severe("Error loading documents: " + e.getMessage());
+        }
+        return list;
+    }
+
+    public void deleteDocument(String documentId) {
+        String sql = "DELETE FROM case_document WHERE document_id = ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, documentId);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            LOGGER.severe("Error deleting document: " + e.getMessage());
+        }
     }
 }

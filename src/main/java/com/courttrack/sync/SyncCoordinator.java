@@ -43,7 +43,7 @@ public class SyncCoordinator {
         new Thread(() -> {
             try (Connection conn = DatabaseManager.getInstance().getConnection()) {
                 SyncQueueItem existing = findSyncQueueItem(conn, "person", personId);
-                if (existing != null && !"FAILED".equals(existing.getStatus())) {
+                if (existing != null && ("QUEUED".equals(existing.getStatus()) || "BLOCKED".equals(existing.getStatus()))) {
                     return;
                 }
                 SyncQueueItem item = new SyncQueueItem("person", personId, operation);
@@ -59,7 +59,8 @@ public class SyncCoordinator {
         new Thread(() -> {
             try (Connection conn = DatabaseManager.getInstance().getConnection()) {
                 SyncQueueItem existing = findSyncQueueItem(conn, "case", caseId);
-                if (existing != null && !"FAILED".equals(existing.getStatus())) {
+                // Skip only if already pending — allow re-queue when COMPLETED or FAILED
+                if (existing != null && ("QUEUED".equals(existing.getStatus()) || "BLOCKED".equals(existing.getStatus()))) {
                     return;
                 }
                 SyncQueueItem item = new SyncQueueItem("case", caseId, operation);
@@ -649,7 +650,7 @@ public class SyncCoordinator {
     private static String getStr(Map<String, Object> data, String... keys) {
         for (String key : keys) {
             Object val = data.get(key);
-            if (val instanceof String s && !s.isEmpty()) return s;
+            if (val instanceof String s) return s;
         }
         return null;
     }
@@ -699,18 +700,22 @@ public class SyncCoordinator {
 
     private Map<String, Object> buildCaseMap(CourtCase courtCase) {
         Map<String, Object> map = new HashMap<>();
+        String filingDateStr = courtCase.getFilingDate() != null ? courtCase.getFilingDate().toString() : null;
+        String judgmentDateStr = courtCase.getDateOfJudgment() != null ? courtCase.getDateOfJudgment().toString() : null;
+
+        // camelCase keys — read by desktop pull logic
         map.put("caseId", courtCase.getCaseId());
         map.put("caseNumber", courtCase.getCaseNumber());
         map.put("caseTitle", courtCase.getCaseTitle());
         map.put("courtId", courtCase.getCourtId());
         map.put("courtName", courtCase.getCourtName());
-        map.put("filingDate", courtCase.getFilingDate() != null ? courtCase.getFilingDate().toString() : null);
+        map.put("filingDate", filingDateStr);
         map.put("caseStatus", courtCase.getCaseStatus());
         map.put("caseCategory", courtCase.getCaseCategory());
         map.put("caseType", courtCase.getCaseType());
         map.put("priority", courtCase.getPriority());
         map.put("description", courtCase.getDescription());
-        map.put("dateOfJudgment", courtCase.getDateOfJudgment() != null ? courtCase.getDateOfJudgment().toString() : null);
+        map.put("dateOfJudgment", judgmentDateStr);
         map.put("sentence", courtCase.getSentence());
         map.put("mitigationNotes", courtCase.getMitigationNotes());
         map.put("prosecutionCounsel", courtCase.getProsecutionCounsel());
@@ -722,6 +727,15 @@ public class SyncCoordinator {
         map.put("isDeleted", courtCase.isDeleted());
         map.put("version", courtCase.getVersion());
         map.put("updatedAt", System.currentTimeMillis());
+
+        // PascalCase aliases — read by mobile app
+        map.put("Status", courtCase.getCaseStatus());
+        map.put("CaseType", courtCase.getCaseCategory());
+        map.put("Priority", courtCase.getPriority());
+        map.put("CourtName", courtCase.getCourtName());
+        map.put("Title", courtCase.getCaseTitle());
+        map.put("DateFiled", filingDateStr);
+
         return map;
     }
 

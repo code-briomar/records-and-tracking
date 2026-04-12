@@ -28,7 +28,16 @@ public class CourtCase {
     private boolean isDeleted;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    
+
+    // New fields
+    private String accusedName;
+    private String complainantName;
+    private String defenseWitnesses;
+    private String prosecutionWitnesses;
+    private String applicableLaw;
+    private String judgeName;
+    private String offenderHistory;
+
     // Sync fields
     private boolean isNew = true;
     private boolean hasChanges = false;
@@ -147,6 +156,29 @@ public class CourtCase {
 
     public String getLastSyncError() { return lastSyncError; }
     public void setLastSyncError(String lastSyncError) { this.lastSyncError = lastSyncError; }
+
+    // --- New field getters/setters ---
+
+    public String getAccusedName() { return accusedName; }
+    public void setAccusedName(String accusedName) { this.accusedName = accusedName; }
+
+    public String getComplainantName() { return complainantName; }
+    public void setComplainantName(String complainantName) { this.complainantName = complainantName; }
+
+    public String getDefenseWitnesses() { return defenseWitnesses; }
+    public void setDefenseWitnesses(String defenseWitnesses) { this.defenseWitnesses = defenseWitnesses; }
+
+    public String getProsecutionWitnesses() { return prosecutionWitnesses; }
+    public void setProsecutionWitnesses(String prosecutionWitnesses) { this.prosecutionWitnesses = prosecutionWitnesses; }
+
+    public String getApplicableLaw() { return applicableLaw; }
+    public void setApplicableLaw(String applicableLaw) { this.applicableLaw = applicableLaw; }
+
+    public String getJudgeName() { return judgeName; }
+    public void setJudgeName(String judgeName) { this.judgeName = judgeName; }
+
+    public String getOffenderHistory() { return offenderHistory; }
+    public void setOffenderHistory(String offenderHistory) { this.offenderHistory = offenderHistory; }
 
     // --- Transient charge fields ---
 
