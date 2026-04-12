@@ -14,19 +14,30 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-        <javafx.version>21.0.2</javafx.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <javafx.version>21.0.10</javafx.version>
     </properties>
 
     <dependencies>
+        <!-- Classifierless: used by javafx-maven-plugin to build module path -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-graphics</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
         </dependency>
-        <!-- Platform-specific natives bundled for a cross-platform fat JAR.
-             Without these, a JAR built on Linux won't run on Windows and vice-versa. -->
+
+        <!-- Platform-specific natives for fat JAR -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-base</artifactId>
@@ -63,6 +74,7 @@
             <version>${javafx.version}</version>
             <classifier>linux</classifier>
         </dependency>
+
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
@@ -115,8 +127,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <source>21</source>
+                    <target>21</target>
                 </configuration>
             </plugin>
             <plugin>
@@ -145,8 +157,6 @@
                                         <exclude>META-INF/maven/**</exclude>
                                     </excludes>
                                 </filter>
-                                <!-- Exclude duplicate module-info.class files from
-                                     platform-specific JavaFX JARs to avoid shade conflicts -->
                                 <filter>
                                     <artifact>org.openjfx:*</artifact>
                                     <excludes>
@@ -159,21 +169,35 @@
                 </executions>
             </plugin>
             <plugin>
-                <groupId>org.openjfx</groupId>
-                <artifactId>javafx-maven-plugin</artifactId>
-                <version>0.0.8</version>
-                <configuration>
-                    <mainClass>com.courttrack.App</mainClass>
-                </configuration>
-            </plugin>
+    <groupId>org.openjfx</groupId>
+    <artifactId>javafx-maven-plugin</artifactId>
+    <version>0.0.8</version>
+    <configuration>
+        <mainClass>com.courttrack.App</mainClass>
+        <options>
+            <option>-Dprism.verbose=true</option>
+            <option>--module-path</option>
+            <option>C:\javafx-sdk-21.0.10\lib</option>
+            <option>--add-modules</option>
+            <option>javafx.controls,javafx.graphics,javafx.base</option>
+        </options>
+    </configuration>
+</plugin>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.6.3</version>
-                <configuration>
-                    <mainClass>com.courttrack.App</mainClass>
-                </configuration>
-            </plugin>
+    <groupId>org.codehaus.mojo</groupId>
+    <artifactId>exec-maven-plugin</artifactId>
+    <version>3.6.3</version>
+    <configuration>
+        <executable>java</executable>
+        <arguments>
+            <argument>--module-path=C:\javafx-sdk-21.0.10\lib</argument>
+            <argument>--add-modules=javafx.controls,javafx.graphics,javafx.base</argument>
+            <argument>-cp</argument>
+            <classpath/>
+            <argument>com.courttrack.App</argument>
+        </arguments>
+    </configuration>
+</plugin>
             <plugin>
                 <groupId>org.panteleyev</groupId>
                 <artifactId>jpackage-maven-plugin</artifactId>
@@ -213,7 +237,6 @@
                     <productName>Records and Tracking</productName>
                     <companyName>CourtTrack</companyName>
                     <fileDescription>Kenyan Court Records and Tracking System</fileDescription>
-                    <!-- launch4j requires its native binary; skip on non-Windows -->
                     <skip>${launch4j.skip}</skip>
                 </configuration>
                 <executions>
