@@ -186,7 +186,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         g1.add(caseTitleField, 1, r++);
         g1.add(lbl("Status *"),     0, r); g1.add(statusBox,        1, r);
         g1.add(lbl("Date Filed *"), 2, r); g1.add(filingDatePicker,  3, r);
-        VBox sec1 = buildAlwaysOpenCard("Case Information", Feather.BRIEFCASE, g1);
+        VBox sec1 = buildAlwaysOpenCard("Case Information", Feather.BRIEFCASE, g1, tm.accentBlue());
 
         // ============================================================
         // Section 2: Case Description
@@ -201,7 +201,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         GridPane.setColumnSpan(chargeDescArea, 3);    g2.add(chargeDescArea, 1, r++);
         g2.add(lbl("Applicable Law"), 0, r);
         GridPane.setColumnSpan(applicableLawField, 3); g2.add(applicableLawField, 1, r);
-        VBox sec2 = buildCollapsibleCard("Case Description", Feather.FILE_TEXT, g2, existing != null);
+        VBox sec2 = buildCollapsibleCard("Case Description", Feather.FILE_TEXT, g2, existing != null, tm.accentGreen());
 
         // ============================================================
         // Section 3: Parties
@@ -218,7 +218,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         GridPane.setColumnSpan(defenseWitnessesField, 3); g3.add(defenseWitnessesField, 1, r++);
         g3.add(lbl("Prosecution Witnesses"), 0, r);
         GridPane.setColumnSpan(prosecutionWitnessesField, 3); g3.add(prosecutionWitnessesField, 1, r);
-        VBox sec3 = buildCollapsibleCard("Parties", Feather.USERS, g3, existing != null);
+        VBox sec3 = buildCollapsibleCard("Parties", Feather.USERS, g3, existing != null, tm.accentOrange());
 
         // ============================================================
         // Section 4: Court Information
@@ -229,7 +229,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         g4.add(lbl("Judge / Magistrate"), 2, r); g4.add(judgeNameBox,  3, r++);
         g4.add(lbl("Date of Judgment"), 0, r); g4.add(judgmentDatePicker, 1, r);
         g4.add(lbl("Court Assistant"),  2, r); g4.add(courtAssistantField, 3, r);
-        VBox sec4 = buildCollapsibleCard("Court Information", Feather.AWARD, g4, existing != null);
+        VBox sec4 = buildCollapsibleCard("Court Information", Feather.AWARD, g4, existing != null, tm.accentPurple());
 
         // ============================================================
         // Section 5: Hearing
@@ -237,7 +237,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         GridPane g5 = grid(lbl1, fld1, lbl2, fld2);
         g5.add(lbl("Hearing Dates"), 0, 0);
         GridPane.setColumnSpan(hearingDatesField, 3); g5.add(hearingDatesField, 1, 0);
-        VBox sec5 = buildCollapsibleCard("Hearing", Feather.CALENDAR, g5, existing != null);
+        VBox sec5 = buildCollapsibleCard("Hearing", Feather.CALENDAR, g5, existing != null, "#c9a227");
 
         // ============================================================
         // Section 6: Outcome
@@ -252,7 +252,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         GridPane.setColumnSpan(mitigationArea, 3); g6.add(mitigationArea, 1, r++);
         g6.add(lbl("Offender History"), 0, r);
         GridPane.setColumnSpan(offenderHistoryArea, 3); g6.add(offenderHistoryArea, 1, r);
-        VBox sec6 = buildCollapsibleCard("Case Outcome", Feather.CHECK_SQUARE, g6, existing != null);
+        VBox sec6 = buildCollapsibleCard("Case Outcome", Feather.CHECK_SQUARE, g6, existing != null, tm.accentRed());
 
         // ============================================================
         // Section 7: Documents
@@ -268,7 +268,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         browseBtn.setOnAction(e -> openFilePicker());
         VBox docContent = new VBox(10, docHint, browseBtn, documentsListBox);
         docContent.setPadding(new Insets(14, 20, 16, 20));
-        VBox sec7 = buildCollapsibleCard("Documents", Feather.PAPERCLIP, docContent, false);
+        VBox sec7 = buildCollapsibleCard("Documents", Feather.PAPERCLIP, docContent, false, tm.accentBlue());
 
         // ============================================================
         // Participants
@@ -282,7 +282,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
                 tm.accentBlue(), tm.accentBlue()));
         VBox partContent = new VBox(10, participantsBox, addPartBtn);
         partContent.setPadding(new Insets(14, 20, 16, 20));
-        VBox sec8 = buildCollapsibleCard("Participants", Feather.USER_PLUS, partContent, false);
+        VBox sec8 = buildCollapsibleCard("Participants", Feather.USER_PLUS, partContent, false, "#0f7b6c");
 
         // ============================================================
         // Assemble scroll content
@@ -295,8 +295,8 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
         scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scroll.setPrefWidth(700);
-        scroll.setPrefHeight(590);
+        scroll.setPrefWidth(720);
+        scroll.setPrefHeight(560);
         scroll.setStyle("-fx-background-color: " + bg + "; -fx-background: " + bg + ";");
 
         // ============================================================
@@ -329,12 +329,36 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         // Dialog chrome
         // ============================================================
         getDialogPane().setContent(scroll);
+
         ButtonType ADD_ANOTHER = new ButtonType("Save & Add Another", ButtonBar.ButtonData.LEFT);
         getDialogPane().getButtonTypes().addAll(ButtonType.OK, ADD_ANOTHER, ButtonType.CANCEL);
 
         Stage stage = (Stage) getDialogPane().getScene().getWindow();
-        stage.setMinWidth(860);
-        stage.setMinHeight(640);
+        stage.setMinWidth(720);
+        stage.setMinHeight(620);
+
+        // Style button bar, scrollbar, and fill full width after skin is applied
+        setOnShown(ev -> {
+            Node buttonBar = getDialogPane().lookup(".button-bar");
+            if (buttonBar != null) {
+                String btnBg  = tm.isDark() ? "#1c1c1c" : "#f0f0f0";
+                String btnBrd = tm.isDark() ? "#333333" : "#d0d0d0";
+                buttonBar.setStyle(String.format(
+                        "-fx-background-color: %s; -fx-border-color: %s transparent transparent transparent;" +
+                        "-fx-border-width: 1 0 0 0; -fx-padding: 10 16;", btnBg, btnBrd));
+            }
+            String thumbClr = tm.isDark() ? "#505050" : "#b0b0b0";
+            String trackClr = tm.isDark() ? "#222222" : "#e0e0e0";
+            scroll.lookupAll(".scroll-bar").forEach(sb -> {
+                sb.setStyle("-fx-background-color: transparent;");
+                sb.lookupAll(".track").forEach(t ->
+                        t.setStyle("-fx-background-color: " + trackClr + "; -fx-background-radius: 0;"));
+                sb.lookupAll(".thumb").forEach(t ->
+                        t.setStyle("-fx-background-color: " + thumbClr + "; -fx-background-radius: 4;"));
+                sb.lookupAll(".increment-button, .decrement-button").forEach(b ->
+                        b.setStyle("-fx-background-color: transparent; -fx-padding: 0;"));
+            });
+        });
 
         Button okBtn = (Button) getDialogPane().lookupButton(ButtonType.OK);
         okBtn.setText(existing == null ? "Add Case" : "Save Changes");
@@ -578,17 +602,18 @@ public class CaseFormDialog extends Dialog<CourtCase> {
     // Card builders
     // ================================================================
 
-    private VBox buildAlwaysOpenCard(String title, Feather icon, Node content) {
-        String bg = tm.isDark() ? "#1e1e1e" : "#ffffff";
-        String border = tm.isDark() ? "#383838" : "#dedede";
+    private VBox buildAlwaysOpenCard(String title, Feather icon, Node content, String accentColor) {
+        String cardBg  = tm.isDark() ? "#1e1e1e" : "#ffffff";
+        String border  = tm.isDark() ? "#383838" : "#dedede";
 
         VBox card = new VBox(0);
+        card.setMaxWidth(Double.MAX_VALUE);
         card.setStyle(String.format(
                 "-fx-background-color: %s; -fx-border-color: %s;" +
-                "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", bg, border));
+                "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", cardBg, border));
 
-        Region accent = accentBar(tm.accentBlue());
-        FontIcon fi = new FontIcon(icon); fi.setIconSize(14); fi.setIconColor(Color.web(tm.accentBlue()));
+        Region accent = accentBar(accentColor);
+        FontIcon fi = new FontIcon(icon); fi.setIconSize(14); fi.setIconColor(Color.web(accentColor));
         Label label = new Label(title); label.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
 
         HBox inner = new HBox(8, fi, label);
@@ -606,19 +631,20 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         return card;
     }
 
-    private VBox buildCollapsibleCard(String title, Feather icon, Node content, boolean expanded) {
-        String bg = tm.isDark() ? "#1e1e1e" : "#ffffff";
-        String border = tm.isDark() ? "#383838" : "#dedede";
-        String muted = tm.isDark() ? "#5a5a5a" : "#aaaaaa";
-        String hover = tm.isDark() ? "#ffffff07" : "#0000000a";
+    private VBox buildCollapsibleCard(String title, Feather icon, Node content, boolean expanded, String accentColor) {
+        String cardBg  = tm.isDark() ? "#1e1e1e" : "#ffffff";
+        String border  = tm.isDark() ? "#383838" : "#dedede";
+        String muted   = tm.isDark() ? "#5a5a5a" : "#aaaaaa";
+        String hover   = tm.isDark() ? "#ffffff07" : "#0000000a";
 
         VBox card = new VBox(0);
+        card.setMaxWidth(Double.MAX_VALUE);
         card.setStyle(String.format(
                 "-fx-background-color: %s; -fx-border-color: %s;" +
-                "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", bg, border));
+                "-fx-border-width: 1; -fx-border-radius: 8; -fx-background-radius: 8;", cardBg, border));
 
-        Region accent = accentBar(tm.accentBlue());
-        FontIcon fi = new FontIcon(icon); fi.setIconSize(14); fi.setIconColor(Color.web(tm.accentBlue()));
+        Region accent = accentBar(accentColor);
+        FontIcon fi = new FontIcon(icon); fi.setIconSize(14); fi.setIconColor(Color.web(accentColor));
         Label titleLabel = new Label(title); titleLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
         FontIcon arrow = new FontIcon(expanded ? Feather.CHEVRON_UP : Feather.CHEVRON_DOWN);
         arrow.setIconSize(13); arrow.setIconColor(Color.web(muted));

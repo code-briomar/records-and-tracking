@@ -27,6 +27,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Separator;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
@@ -426,106 +427,288 @@ public class MainView {
         dialog.setHeaderText(null);
         dialog.initModality(Modality.APPLICATION_MODAL);
 
-        VBox content = new VBox(16);
-        content.setPadding(new Insets(20, 28, 12, 28));
-        content.setPrefWidth(460);
+        String bg       = tm.isDark() ? "#161616" : "#f4f4f4";
+        String cardBg   = tm.isDark() ? "#1e1e1e" : "#ffffff";
+        String cardBdr  = tm.isDark() ? "#383838" : "#dedede";
+        String mutedClr = tm.isDark() ? "#8a8a8a" : "#5a5a5a";
 
-        // Header
-        FontIcon settingsIcon = new FontIcon(Feather.SETTINGS);
-        settingsIcon.setIconSize(18);
-        settingsIcon.setIconColor(Color.web(tm.accentBlue()));
-        Label titleLabel = new Label("Settings");
-        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
-        HBox header = new HBox(10, settingsIcon, titleLabel);
-        header.setAlignment(Pos.CENTER_LEFT);
+        // ---- helper: section card ----
+        // builds a titled card with a left accent bar
+        java.util.function.BiFunction<String, Feather, VBox[]> makeCard = (title, icon) -> {
+            VBox card = new VBox(0);
+            card.setStyle(String.format("-fx-background-color: %s; -fx-border-color: %s;" +
+                    "-fx-border-width:1; -fx-border-radius:8; -fx-background-radius:8;", cardBg, cardBdr));
 
-        Separator sep = new Separator();
+            Region accent = new Region();
+            accent.setPrefWidth(3); accent.setMinWidth(3);
+            accent.setStyle("-fx-background-color: " + tm.accentBlue() + "; -fx-background-radius: 2 0 0 0;");
 
-        // Theme toggle
+            FontIcon fi = new FontIcon(icon); fi.setIconSize(14);
+            fi.setIconColor(Color.web(tm.accentBlue()));
+            Label lbl = new Label(title);
+            lbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+
+            HBox inner = new HBox(8, fi, lbl);
+            inner.setAlignment(Pos.CENTER_LEFT);
+            inner.setPadding(new Insets(11, 14, 9, 12));
+            HBox.setHgrow(inner, Priority.ALWAYS);
+
+            HBox header = new HBox(0, accent, inner);
+            header.setAlignment(Pos.CENTER_LEFT);
+            header.setStyle(String.format("-fx-border-color: transparent transparent %s transparent;" +
+                    "-fx-border-width:0 0 1 0; -fx-background-radius:8 8 0 0;", cardBdr));
+
+            VBox body = new VBox(0);
+            body.setPadding(new Insets(14, 18, 16, 18));
+            card.getChildren().addAll(header, body);
+            return new VBox[]{card, body};
+        };
+
+        // ---- helper: setting row ----
+        java.util.function.Function<String[], HBox> makeRow = parts -> {
+            Label name = new Label(parts[0]);
+            name.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
+            Label desc = new Label(parts[1]);
+            desc.setFont(Font.font("System", 11));
+            desc.setStyle("-fx-text-fill: " + mutedClr + ";");
+            VBox text = new VBox(2, name, desc);
+            HBox.setHgrow(text, Priority.ALWAYS);
+            HBox row = new HBox(12, text);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.setPadding(new Insets(6, 0, 6, 0));
+            return row;
+        };
+
+        // ================================================================
+        // Section 1: Appearance
+        // ================================================================
+        VBox[] appearanceCard = makeCard.apply("Appearance", Feather.MONITOR);
+        VBox appearanceBody = appearanceCard[1];
+
+        // Theme row
+        HBox themeRow = makeRow.apply(new String[]{
+                "Theme",
+                tm.isDark() ? "Dark mode is active" : "Light mode is active"
+        });
         FontIcon themeIcon = new FontIcon(tm.isDark() ? Feather.SUN : Feather.MOON);
-        themeIcon.setIconSize(16);
-        themeIcon.setIconColor(Color.web(tm.accentOrange()));
+        themeIcon.setIconSize(15); themeIcon.setIconColor(Color.web(tm.accentOrange()));
+        Button themeBtn = new Button(tm.isDark() ? "Switch to Light" : "Switch to Dark");
+        themeBtn.getStyleClass().add("accent");
+        themeBtn.setOnAction(e -> { tm.toggle(); applyTheme(); dialog.close(); });
+        themeRow.getChildren().add(0, themeIcon);
+        themeRow.getChildren().add(themeBtn);
 
-        Label themeLabel = new Label("Theme");
-        themeLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+        // Sidebar row
+        HBox sidebarRow = makeRow.apply(new String[]{
+                "Sidebar",
+                sidebarCollapsed ? "Currently collapsed" : "Currently expanded"
+        });
+        FontIcon sbIcon = new FontIcon(Feather.SIDEBAR);
+        sbIcon.setIconSize(15); sbIcon.setIconColor(Color.web(tm.accentGreen()));
+        Button sidebarBtn = new Button(sidebarCollapsed ? "Expand" : "Collapse");
+        sidebarBtn.setOnAction(e -> { toggleSidebar(); dialog.close(); });
+        sidebarRow.getChildren().add(0, sbIcon);
+        sidebarRow.getChildren().add(sidebarBtn);
 
-        Label themeDesc = new Label(tm.isDark() ? "Currently using dark mode" : "Currently using light mode");
-        themeDesc.setFont(Font.font("System", 12));
-        themeDesc.getStyleClass().add("text-muted");
+        appearanceBody.getChildren().addAll(themeRow, new Separator(), sidebarRow);
 
-        VBox themeText = new VBox(2, themeLabel, themeDesc);
-        HBox.setHgrow(themeText, Priority.ALWAYS);
+        // ================================================================
+        // Section 2: Session / Court
+        // ================================================================
+        VBox[] sessionCard = makeCard.apply("Session", Feather.USER);
+        VBox sessionBody = sessionCard[1];
 
-        Button themeToggle = new Button(tm.isDark() ? "Switch to Light" : "Switch to Dark");
-        themeToggle.getStyleClass().add("accent");
-        themeToggle.setOnAction(e -> {
-            tm.toggle();
-            applyTheme();
+        com.courttrack.sync.CourtContext ctx = com.courttrack.sync.CourtContext.getInstance();
+        sessionBody.getChildren().addAll(
+                infoRow("Logged in as", username, mutedClr),
+                infoRow("Email", ctx.isBound() ? ctx.getUserEmail() : "—", mutedClr),
+                infoRow("Role", ctx.isBound() ? ctx.getUserRole() : "—", mutedClr),
+                new Separator(),
+                infoRow("Court", ctx.isBound() ? ctx.getCourtName() : "Not bound", mutedClr),
+                infoRow("Court ID", ctx.isBound() ? ctx.getCourtId() : "—", mutedClr)
+        );
+
+        // ================================================================
+        // Section 3: Sync
+        // ================================================================
+        VBox[] syncCard = makeCard.apply("Sync", Feather.REFRESH_CW);
+        VBox syncBody = syncCard[1];
+
+        SyncStatus syncStatus = SyncStatus.getInstance();
+
+        // Status badge
+        String stateText = switch (syncStatus.getState()) {
+            case SYNCED  -> "Up to date";
+            case SYNCING -> "Syncing…";
+            case ERROR   -> "Sync error";
+            case OFFLINE -> "Offline";
+        };
+        String stateDot = switch (syncStatus.getState()) {
+            case SYNCED  -> tm.accentGreen();
+            case SYNCING -> tm.accentBlue();
+            case ERROR   -> tm.accentRed();
+            case OFFLINE -> mutedClr;
+        };
+
+        Region dot = new Region();
+        dot.setPrefSize(8, 8); dot.setMinSize(8, 8);
+        dot.setStyle("-fx-background-color: " + stateDot + "; -fx-background-radius: 4;");
+        Label stateLabel = new Label(stateText);
+        stateLabel.setFont(Font.font("System", 12));
+        Label msgLabel = new Label(syncStatus.messageProperty().get());
+        msgLabel.setFont(Font.font("System", 11));
+        msgLabel.setStyle("-fx-text-fill: " + mutedClr + ";");
+        msgLabel.setWrapText(true);
+        HBox.setHgrow(msgLabel, Priority.ALWAYS);
+
+        // Force sync button
+        FontIcon syncIcon = new FontIcon(Feather.UPLOAD_CLOUD);
+        syncIcon.setIconSize(13); syncIcon.setIconColor(Color.web(tm.accentBlue()));
+        Button syncNowBtn = new Button("Sync Now");
+        syncNowBtn.setGraphic(syncIcon);
+        syncNowBtn.setDisable(syncStatus.getState() == SyncStatus.State.SYNCING);
+        syncNowBtn.setOnAction(e -> {
+            syncNowBtn.setDisable(true);
+            syncNowBtn.setText("Syncing…");
+            new Thread(() -> com.courttrack.sync.SyncCoordinator.getInstance().syncAll(true)).start();
             dialog.close();
         });
 
-        HBox themeRow = new HBox(12, themeIcon, themeText, themeToggle);
-        themeRow.setAlignment(Pos.CENTER_LEFT);
-        themeRow.setPadding(new Insets(8, 0, 8, 0));
+        HBox statusRow = new HBox(8, dot, stateLabel);
+        statusRow.setAlignment(Pos.CENTER_LEFT);
+        statusRow.setPadding(new Insets(4, 0, 2, 0));
 
-        // Sidebar toggle
-        FontIcon sidebarIcon = new FontIcon(Feather.SIDEBAR);
-        sidebarIcon.setIconSize(16);
-        sidebarIcon.setIconColor(Color.web(tm.accentGreen()));
+        HBox syncMsgRow = new HBox(12, msgLabel);
+        HBox.setHgrow(syncMsgRow, Priority.ALWAYS);
+        syncMsgRow.setAlignment(Pos.CENTER_LEFT);
+        syncMsgRow.setPadding(new Insets(0, 0, 8, 0));
 
-        Label sidebarLabel = new Label("Sidebar");
-        sidebarLabel.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
+        HBox syncBtnRow = new HBox(syncNowBtn);
+        syncBtnRow.setAlignment(Pos.CENTER_LEFT);
+        syncBtnRow.setPadding(new Insets(4, 0, 4, 0));
 
-        Label sidebarDesc = new Label(sidebarCollapsed ? "Currently collapsed" : "Currently expanded");
-        sidebarDesc.setFont(Font.font("System", 12));
-        sidebarDesc.getStyleClass().add("text-muted");
+        syncBody.getChildren().addAll(statusRow, syncMsgRow, syncBtnRow);
 
-        VBox sidebarText = new VBox(2, sidebarLabel, sidebarDesc);
-        HBox.setHgrow(sidebarText, Priority.ALWAYS);
+        // ================================================================
+        // Section 4: About & Updates
+        // ================================================================
+        VBox[] aboutCard = makeCard.apply("About", Feather.INFO);
+        VBox aboutBody = aboutCard[1];
 
-        Button sidebarToggle = new Button(sidebarCollapsed ? "Expand" : "Collapse");
-        sidebarToggle.setOnAction(e -> {
-            toggleSidebar();
-            dialog.close();
+        String version = com.courttrack.util.AppVersion.getVersion();
+        aboutBody.getChildren().addAll(
+                infoRow("Application", "CourtTrack", mutedClr),
+                infoRow("Version", "v" + version, mutedClr),
+                infoRow("Platform", System.getProperty("os.name"), mutedClr)
+        );
+
+        FontIcon updateIcon = new FontIcon(Feather.DOWNLOAD_CLOUD);
+        updateIcon.setIconSize(13); updateIcon.setIconColor(Color.web(tm.accentBlue()));
+        Button checkUpdateBtn = new Button("Check for Updates");
+        checkUpdateBtn.setGraphic(updateIcon);
+        checkUpdateBtn.setOnAction(e -> {
+            checkUpdateBtn.setDisable(true);
+            checkUpdateBtn.setText("Checking…");
+            new Thread(() -> {
+                com.courttrack.update.UpdateChecker checker = new com.courttrack.update.UpdateChecker();
+                java.util.Optional<com.courttrack.update.UpdateInfo> info = checker.checkForUpdate();
+                javafx.application.Platform.runLater(() -> {
+                    if (info.isPresent()) {
+                        showUpdateNotification(info.get());
+                        dialog.close();
+                    } else {
+                        checkUpdateBtn.setDisable(false);
+                        checkUpdateBtn.setText("Up to date");
+                    }
+                });
+            }).start();
         });
 
-        HBox sidebarRow = new HBox(12, sidebarIcon, sidebarText, sidebarToggle);
-        sidebarRow.setAlignment(Pos.CENTER_LEFT);
-        sidebarRow.setPadding(new Insets(8, 0, 8, 0));
+        HBox updateRow = new HBox(checkUpdateBtn);
+        updateRow.setAlignment(Pos.CENTER_LEFT);
+        updateRow.setPadding(new Insets(10, 0, 4, 0));
+        aboutBody.getChildren().add(updateRow);
 
-        // Keyboard Shortcuts
-        FontIcon kbIcon = new FontIcon(Feather.COMMAND);
-        kbIcon.setIconSize(16);
-        kbIcon.setIconColor(Color.web(tm.accentBlue()));
-        Label kbTitle = new Label("Keyboard Shortcuts");
-        kbTitle.setFont(Font.font("System", FontWeight.SEMI_BOLD, 13));
-        HBox kbHeader = new HBox(10, kbIcon, kbTitle);
-        kbHeader.setAlignment(Pos.CENTER_LEFT);
-        kbHeader.setPadding(new Insets(4, 0, 4, 0));
+        // ================================================================
+        // Section 5: Keyboard Shortcuts
+        // ================================================================
+        VBox[] kbCard = makeCard.apply("Keyboard Shortcuts", Feather.COMMAND);
+        VBox kbBody = kbCard[1];
 
         GridPane shortcutsGrid = new GridPane();
-        shortcutsGrid.setHgap(20);
-        shortcutsGrid.setVgap(7);
-        shortcutsGrid.setPadding(new Insets(4, 0, 4, 26));
-        ColumnConstraints kbKeyCol = new ColumnConstraints();
-        kbKeyCol.setMinWidth(160);
-        ColumnConstraints kbActCol = new ColumnConstraints();
-        kbActCol.setHgrow(Priority.ALWAYS);
-        shortcutsGrid.getColumnConstraints().addAll(kbKeyCol, kbActCol);
-
-        addShortcutRow(shortcutsGrid, 0, "Ctrl + N", "New Case");
+        shortcutsGrid.setHgap(20); shortcutsGrid.setVgap(8);
+        ColumnConstraints kc1 = new ColumnConstraints(); kc1.setMinWidth(160);
+        ColumnConstraints kc2 = new ColumnConstraints(); kc2.setHgrow(Priority.ALWAYS);
+        shortcutsGrid.getColumnConstraints().addAll(kc1, kc2);
+        addShortcutRow(shortcutsGrid, 0, "Ctrl + N",         "New Case");
         addShortcutRow(shortcutsGrid, 1, "Ctrl + Shift + N", "New Person");
-        addShortcutRow(shortcutsGrid, 2, "Ctrl + 1", "Go to Dashboard");
-        addShortcutRow(shortcutsGrid, 3, "Ctrl + 2", "Go to Cases");
-        addShortcutRow(shortcutsGrid, 4, "Ctrl + 3", "Go to Persons");
-        addShortcutRow(shortcutsGrid, 5, "Escape", "Back / Close detail");
+        addShortcutRow(shortcutsGrid, 2, "Ctrl + Enter",     "Save form (in dialogs)");
+        addShortcutRow(shortcutsGrid, 3, "Ctrl + 1",         "Go to Dashboard");
+        addShortcutRow(shortcutsGrid, 4, "Ctrl + 2",         "Go to Cases");
+        addShortcutRow(shortcutsGrid, 5, "Ctrl + 3",         "Go to Persons");
+        addShortcutRow(shortcutsGrid, 6, "Escape",           "Back / Close detail");
+        kbBody.getChildren().add(shortcutsGrid);
 
-        content.getChildren().addAll(header, sep, themeRow, new Separator(), sidebarRow, new Separator(), kbHeader,
-                shortcutsGrid);
+        // ================================================================
+        // Assemble scroll content
+        // ================================================================
+        VBox scrollContent = new VBox(10,
+                appearanceCard[0], sessionCard[0], syncCard[0], aboutCard[0], kbCard[0]);
+        scrollContent.setPadding(new Insets(16));
+        scrollContent.setStyle("-fx-background-color: " + bg + ";");
 
-        dialog.getDialogPane().setContent(content);
+        ScrollPane scroll = new ScrollPane(scrollContent);
+        scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.setPrefWidth(520);
+        scroll.setPrefHeight(560);
+        scroll.setMaxWidth(Double.MAX_VALUE);
+        scroll.setStyle("-fx-background-color: " + bg + "; -fx-background: " + bg + ";");
+
+        dialog.getDialogPane().setContent(scroll);
         dialog.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dialog.getDialogPane().setStyle("-fx-background-color: " + bg + "; -fx-padding: 0;");
+        dialog.getDialogPane().lookup(".button-bar").setStyle("-fx-background-color: " + bg + "; -fx-padding: 8 16 12 16;");
+
+        javafx.stage.Stage stage = (javafx.stage.Stage) dialog.getDialogPane().getScene().getWindow();
+        stage.setMinWidth(540);
+        stage.setMinHeight(500);
+
+        // Style the scrollbar to match the dark background once the skin is applied
+        dialog.setOnShown(e -> {
+            String trackBg   = tm.isDark() ? "#1a1a1a" : "#e8e8e8";
+            String thumbClr  = tm.isDark() ? "#3a3a3a" : "#b0b0b0";
+            String arrowBg   = tm.isDark() ? "#1a1a1a" : "#e8e8e8";
+            scroll.lookupAll(".scroll-bar").forEach(n ->
+                    n.setStyle("-fx-background-color: " + trackBg + ";"));
+            scroll.lookupAll(".track").forEach(n ->
+                    n.setStyle("-fx-background-color: " + trackBg + "; -fx-background-radius: 0;"));
+            scroll.lookupAll(".thumb").forEach(n ->
+                    n.setStyle("-fx-background-color: " + thumbClr + "; -fx-background-radius: 3;"));
+            scroll.lookupAll(".increment-button, .decrement-button").forEach(n ->
+                    n.setStyle("-fx-background-color: " + arrowBg + "; -fx-padding: 2;"));
+            scroll.lookupAll(".increment-arrow, .decrement-arrow").forEach(n ->
+                    n.setStyle("-fx-background-color: transparent; -fx-padding: 0;"));
+        });
+
         dialog.showAndWait();
+    }
+
+    /** Compact key–value display row used in settings cards. */
+    private HBox infoRow(String key, String value, String mutedClr) {
+        Label keyLbl = new Label(key);
+        keyLbl.setFont(Font.font("System", 12));
+        keyLbl.setStyle("-fx-text-fill: " + mutedClr + ";");
+        keyLbl.setMinWidth(110);
+
+        Label valLbl = new Label(value != null ? value : "—");
+        valLbl.setFont(Font.font("System", FontWeight.SEMI_BOLD, 12));
+        HBox.setHgrow(valLbl, Priority.ALWAYS);
+
+        HBox row = new HBox(12, keyLbl, valLbl);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.setPadding(new Insets(5, 0, 5, 0));
+        return row;
     }
 
     private void addShortcutRow(GridPane grid, int row, String keys, String action) {

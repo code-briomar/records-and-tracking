@@ -49,8 +49,8 @@ public class ThemeManager {
     // --- Badge backgrounds (app-specific semantic colors) ---
     public String badgeOpenBg() { return isDark() ? "#0f7b6c33" : "#dbeddb"; }
     public String badgeOpenText() { return isDark() ? "#4dab9a" : "#0f7b6c"; }
-    public String badgeClosedBg() { return isDark() ? "#d9730d33" : "#fdecc8"; }
-    public String badgeClosedText() { return isDark() ? "#e8a54b" : "#d9730d"; }
+    public String badgeClosedBg() { return isDark() ? "#ffffff18" : "#e4e4e4"; }
+    public String badgeClosedText() { return isDark() ? "#9a9a9a" : "#555555"; }
     public String badgeCriminalBg() { return isDark() ? "#e03e3e33" : "#fbe4e4"; }
     public String badgeCriminalText() { return isDark() ? "#eb7272" : "#e03e3e"; }
     public String badgeTrafficBg() { return isDark() ? "#d9730d33" : "#fdecc8"; }

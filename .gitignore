@@ -34,3 +34,9 @@ rpmbuild/
 target/
 
 *.spec
+
+# IDE files
+.idea/
+.vscode/
+.classpath
+.settings/
