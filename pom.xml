@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.courttrack</groupId>
     <artifactId>records-and-tracking</artifactId>
     <version>0.1.15</version>
-    <packaging>jar</packaging>
 
     <name>Records and Tracking</name>
     <description>Kenyan Court Records and Tracking System</description>
@@ -16,278 +17,197 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
+
         <javafx.version>21.0.10</javafx.version>
+        <mainClass>com.courttrack.AppLauncher</mainClass>
     </properties>
 
     <dependencies>
-        <!-- Classifierless: used by javafx-maven-plugin to build module path -->
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-base</artifactId>
-            <version>${javafx.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
-            <version>${javafx.version}</version>
-        </dependency>
+
+        <!-- JavaFX -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>
             <version>${javafx.version}</version>
+            <classifier>win</classifier>
         </dependency>
 
-        <!-- Platform-specific natives for fat JAR -->
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-base</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>win</classifier>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-base</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>linux</classifier>
-        </dependency>
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-graphics</artifactId>
             <version>${javafx.version}</version>
             <classifier>win</classifier>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-graphics</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>linux</classifier>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-controls</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>win</classifier>
-        </dependency>
-        <dependency>
-            <groupId>org.openjfx</groupId>
-            <artifactId>javafx-controls</artifactId>
-            <version>${javafx.version}</version>
-            <classifier>linux</classifier>
         </dependency>
 
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-base</artifactId>
+            <version>${javafx.version}</version>
+            <classifier>win</classifier>
+        </dependency>
+
+        <!-- Database -->
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>2.2.224</version>
         </dependency>
+
+        <!-- UI -->
         <dependency>
             <groupId>io.github.mkpaz</groupId>
             <artifactId>atlantafx-base</artifactId>
             <version>2.1.0</version>
         </dependency>
+
+        <!-- Icons -->
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-javafx</artifactId>
             <version>12.3.1</version>
         </dependency>
+
         <dependency>
             <groupId>org.kordamp.ikonli</groupId>
             <artifactId>ikonli-feather-pack</artifactId>
             <version>12.3.1</version>
         </dependency>
+
+        <!-- JSON -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.10.1</version>
         </dependency>
+
     </dependencies>
 
     <build>
+
         <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.6.0</version>
-                <executions>
-                    <execution>
-                        <id>copy-dependencies</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>copy-dependencies</goal>
-                        </goals>
-                        <configuration>
-                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
-                            <includeScope>runtime</includeScope>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+
+            <!-- Java Compiler -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
+
                 <configuration>
                     <source>21</source>
                     <target>21</target>
                 </configuration>
             </plugin>
+
+            <!-- JavaFX -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+
+                <configuration>
+                    <mainClass>${mainClass}</mainClass>
+                </configuration>
+            </plugin>
+
+            <!-- Fat JAR -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.5.1</version>
+
                 <executions>
                     <execution>
                         <phase>package</phase>
-                        <goals><goal>shade</goal></goals>
+
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+
                         <configuration>
-                            <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>com.courttrack.AppLauncher</mainClass>
-                                </transformer>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                            </transformers>
+
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+
+                            <transformers>
+
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                    <mainClass>${mainClass}</mainClass>
+                                </transformer>
+
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+
+                            </transformers>
+
                             <filters>
+
                                 <filter>
                                     <artifact>*:*</artifact>
+
                                     <excludes>
                                         <exclude>META-INF/*.SF</exclude>
                                         <exclude>META-INF/*.DSA</exclude>
                                         <exclude>META-INF/*.RSA</exclude>
-                                        <exclude>META-INF/maven/**</exclude>
                                     </excludes>
+
                                 </filter>
-                                <filter>
-                                    <artifact>org.openjfx:*</artifact>
-                                    <excludes>
-                                        <exclude>module-info.class</exclude>
-                                    </excludes>
-                                </filter>
+
                             </filters>
+
                         </configuration>
+
                     </execution>
                 </executions>
             </plugin>
-            <plugin>
-    <groupId>org.openjfx</groupId>
-    <artifactId>javafx-maven-plugin</artifactId>
-    <version>0.0.8</version>
-    <configuration>
-        <mainClass>com.courttrack.App</mainClass>
-        <options>
-            <option>-Dprism.verbose=true</option>
-            <option>--module-path</option>
-            <option>C:\javafx-sdk-21.0.10\lib</option>
-            <option>--add-modules</option>
-            <option>javafx.controls,javafx.graphics,javafx.base</option>
-        </options>
-    </configuration>
-</plugin>
-            <plugin>
-    <groupId>org.codehaus.mojo</groupId>
-    <artifactId>exec-maven-plugin</artifactId>
-    <version>3.6.3</version>
-    <configuration>
-        <executable>java</executable>
-        <arguments>
-            <argument>--module-path=C:\javafx-sdk-21.0.10\lib</argument>
-            <argument>--add-modules=javafx.controls,javafx.graphics,javafx.base</argument>
-            <argument>-cp</argument>
-            <classpath/>
-            <argument>com.courttrack.App</argument>
-        </arguments>
-    </configuration>
-</plugin>
-            <plugin>
-                <groupId>org.panteleyev</groupId>
-                <artifactId>jpackage-maven-plugin</artifactId>
-                <version>1.7.3</version>
-                <configuration>
-                    <name>Records and Tracking</name>
-                    <appVersion>${project.version}</appVersion>
-                    <vendor>CourtTrack</vendor>
-                    <input>${project.build.directory}/jpackage-input</input>
-                    <mainJar>${project.artifactId}-${project.version}.jar</mainJar>
-                    <mainClass>com.courttrack.AppLauncher</mainClass>
-                    <type>MSI</type>
-                    <icon>src/main/resources/icons/app.ico</icon>
-                    <destination>${project.build.directory}/jpackage</destination>
-                    <winMenu>true</winMenu>
-                    <winShortcut>true</winShortcut>
-                    <winMenuGroup>CourtTrack</winMenuGroup>
-                    <winPerUserInstall>true</winPerUserInstall>
-                </configuration>
-            </plugin>
+
+            <!-- EXE -->
             <plugin>
                 <groupId>com.akathist.maven.plugins.launch4j</groupId>
                 <artifactId>launch4j-maven-plugin</artifactId>
                 <version>2.7.0</version>
+
                 <configuration>
+
                     <headerType>gui</headerType>
-                    <outfile>${project.build.directory}/records-and-tracking.exe</outfile>
-                    <jar>${project.build.directory}/${project.artifactId}-${project.version}.jar</jar>
-                    <icon>src/main/resources/icons/app.ico</icon>
+
+                    <outfile>
+                        ${project.build.directory}/records-and-tracking.exe
+                    </outfile>
+
+                    <jar>
+                        ${project.build.directory}/${project.artifactId}-${project.version}.jar
+                    </jar>
+
+                    <icon>
+                        src/main/resources/icons/app.ico
+                    </icon>
+
                     <classPath>
-                        <mainClass>com.courttrack.AppLauncher</mainClass>
+                        <mainClass>${mainClass}</mainClass>
                     </classPath>
+
                     <jvmArgs>
                         <jvmArg>-Xmx512m</jvmArg>
                     </jvmArgs>
-                    <version>${project.version}</version>
+
                     <productName>Records and Tracking</productName>
                     <companyName>CourtTrack</companyName>
-                    <fileDescription>Kenyan Court Records and Tracking System</fileDescription>
-                    <skip>${launch4j.skip}</skip>
+
                 </configuration>
+
                 <executions>
                     <execution>
                         <phase>package</phase>
+
                         <goals>
                             <goal>launch4j</goal>
                         </goals>
+
                     </execution>
                 </executions>
+
             </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
-                <executions>
-                    <execution>
-                        <id>stage-jpackage-input</id>
-                        <phase>package</phase>
-                        <goals><goal>run</goal></goals>
-                        <configuration>
-                            <target>
-                                <mkdir dir="${project.build.directory}/jpackage-input"/>
-                                <copy file="${project.build.directory}/${project.artifactId}-${project.version}.jar"
-                                      todir="${project.build.directory}/jpackage-input"/>
-                            </target>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
+
         </plugins>
+
     </build>
 
-    <profiles>
-        <profile>
-            <id>non-windows</id>
-            <activation>
-                <os><family>!windows</family></os>
-            </activation>
-            <properties>
-                <launch4j.skip>true</launch4j.skip>
-            </properties>
-        </profile>
-        <profile>
-            <id>windows</id>
-            <activation>
-                <os><family>windows</family></os>
-            </activation>
-            <properties>
-                <launch4j.skip>false</launch4j.skip>
-            </properties>
-        </profile>
-    </profiles>
 </project>
