@@ -306,6 +306,34 @@ public class CaseDao {
         return 0;
     }
 
+    public int countFiledThisMonth() {
+        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 " +
+                     "AND strftime('%Y-%m', filing_date) = strftime('%Y-%m', 'now')";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        } catch (SQLException e) {
+            LOGGER.severe("Error counting cases filed this month: " + e.getMessage());
+        }
+        return 0;
+    }
+
+    public int countOnAppeal() {
+        String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 " +
+                     "AND appeal_status IS NOT NULL AND appeal_status != ''";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            return rs.getInt(1);
+        } catch (SQLException e) {
+            LOGGER.severe("Error counting appeal cases: " + e.getMessage());
+        }
+        return 0;
+    }
+
     // --- Case Participants ---
 
     public void addParticipant(CaseParticipant cp) {

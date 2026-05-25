@@ -26,6 +26,7 @@ import com.courttrack.sync.CourtContext;
 import com.courttrack.sync.FirestoreContext;
 import com.courttrack.sync.SyncCoordinator;
 import com.courttrack.sync.SyncStatus;
+import com.courttrack.ui.IntroView;
 import com.courttrack.ui.LoginView;
 import com.courttrack.ui.MainView;
 import com.courttrack.ui.ReleaseNotesDialog;
@@ -37,8 +38,10 @@ import com.courttrack.util.VersionPreferences;
 
 import javafx.application.Application;
 import javafx.application.Platform;
+import javafx.geometry.Rectangle2D;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 
 public class App extends Application {
@@ -97,23 +100,37 @@ public class App extends Application {
         stage.setTitle("Records & Tracking System");
         stage.setMinWidth(1000);
         stage.setMinHeight(650);
-        stage.setMaximized(true);  // Set BEFORE show()
+
+        // Fill the screen without setMaximized — avoids a Windows 11 / JavaFX race
+        // where WM_SIZE fires ~1.6 s after startup and spontaneously un-maximizes.
+        Rectangle2D screen = Screen.getPrimary().getVisualBounds();
+        stage.setX(screen.getMinX());
+        stage.setY(screen.getMinY());
+        stage.setWidth(screen.getWidth());
+        stage.setHeight(screen.getHeight());
 
         if (prefs.hasSession() && tryAutoLogin()) {
             stage.show();
             return;
         }
 
-        showLogin();
+        showIntro();
         stage.show();
+    }
+
+    private void showIntro() {
+        IntroView introView = new IntroView(this::showLogin);
+        Scene scene = new Scene(introView.getRoot());
+        addSupplementalCss(scene);
+        primaryStage.setScene(scene);
     }
 
     private void showLogin() {
         CourtContext.getInstance().unbind();
         stopConnectivityChecker();
         SyncStatus.getInstance().set(SyncStatus.State.OFFLINE, "Offline");
-        loginView = new LoginView(this::onLoginAttempt);
-        Scene scene = new Scene(loginView.getRoot(), 1200, 800);
+        loginView = new LoginView(this::onLoginAttempt, this::showIntro);
+        Scene scene = new Scene(loginView.getRoot());
         addSupplementalCss(scene);
         primaryStage.setScene(scene);
     }
@@ -192,8 +209,8 @@ public class App extends Application {
 
                 Platform.runLater(() -> {
                     loginView.setLoading(false);
-                    mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
-                    Scene scene = new Scene(mainView.getRoot(), 1200, 800);
+                    mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showIntro);
+                    Scene scene = new Scene(mainView.getRoot());
                     addSupplementalCss(scene);
                     primaryStage.setScene(scene);
                     mainView.registerKeyShortcuts(scene);
@@ -211,7 +228,8 @@ public class App extends Application {
 
                 startConnectivityChecker();
             } catch (IOException | InterruptedException e) {
-                Platform.runLater(() -> Toast.showError("Login failed: " + e.getMessage()));
+                LOGGER.warning("Login error: " + e.getMessage());
+                Platform.runLater(() -> Toast.showError("Login failed. Check your credentials and connection."));
             }
         }).start();
     }
@@ -246,7 +264,7 @@ public class App extends Application {
         boolean isOnline = checkOnline();
         SyncStatus.getInstance().set(SyncStatus.State.SYNCING, isOnline ? "Connected" : "Offline");
 
-        mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showLogin);
+        mainView = new MainView(fullName.isEmpty() ? email : fullName, this::showIntro);
         Scene scene = new Scene(mainView.getRoot(), 1200, 800);
         addSupplementalCss(scene);
         primaryStage.setScene(scene);

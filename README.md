@@ -4,7 +4,7 @@
 
 This project is designed to support Kenyan court clerks by digitizing and streamlining their daily tasks.
 
-# Run Project `mvn compile exec:exec`
+# Run Project `mvn javafx:run`
 
 ## Auto-Update System
 
