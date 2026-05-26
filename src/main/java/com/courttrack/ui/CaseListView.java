@@ -7,6 +7,7 @@ import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.repository.CaseRepository;
 import com.courttrack.sync.SyncCoordinator;
+import com.courttrack.util.DialogUtil;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -688,6 +689,7 @@ public class CaseListView {
         confirm.setTitle("Confirm Deletion");
         confirm.setHeaderText(null);
         confirm.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(confirm);
 
         VBox content = new VBox(12);
         content.setPadding(new Insets(16, 24, 8, 24));

@@ -9,6 +9,7 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
+import com.courttrack.util.DialogUtil;
 
 public class ReleaseNotesDialog {
     private final Dialog<Void> dialog;
@@ -23,6 +24,7 @@ public class ReleaseNotesDialog {
         dialog.setTitle("What's New in " + version);
         dialog.setHeaderText("Welcome to " + version);
         dialog.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(dialog);
         dialog.getDialogPane().setPrefWidth(700);
         dialog.getDialogPane().setPrefHeight(500);
 

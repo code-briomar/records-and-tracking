@@ -677,4 +677,84 @@ public class CaseDao {
             LOGGER.severe("Error deleting document: " + e.getMessage());
         }
     }
+
+    public java.util.Map<String, Integer> getDelayCounts() {
+        java.util.Map<String, Integer> map = new java.util.HashMap<>();
+        map.put("30-60", 0);
+        map.put("60-90", 0);
+        map.put("90+", 0);
+        String sql = """
+            SELECT
+                SUM(CASE WHEN DATEDIFF('DAY', filing_date, CURRENT_DATE) > 30 AND DATEDIFF('DAY', filing_date, CURRENT_DATE) <= 60 THEN 1 ELSE 0 END) AS delay_30_60,
+                SUM(CASE WHEN DATEDIFF('DAY', filing_date, CURRENT_DATE) > 60 AND DATEDIFF('DAY', filing_date, CURRENT_DATE) <= 90 THEN 1 ELSE 0 END) AS delay_60_90,
+                SUM(CASE WHEN DATEDIFF('DAY', filing_date, CURRENT_DATE) > 90 THEN 1 ELSE 0 END) AS delay_90_plus
+            FROM court_case
+            WHERE is_deleted = 0 AND case_status NOT IN ('CLOSED', 'Closed', 'DISMISSED', 'SETTLED')
+        """;
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                map.put("30-60", rs.getInt("delay_30_60"));
+                map.put("60-90", rs.getInt("delay_60_90"));
+                map.put("90+", rs.getInt("delay_90_plus"));
+            }
+        } catch (SQLException e) {
+            LOGGER.severe("Error fetching delay counts: " + e.getMessage());
+        }
+        return map;
+    }
+
+    public List<java.util.Map<String, Object>> getAverageAgeByCourt() {
+        List<java.util.Map<String, Object>> list = new ArrayList<>();
+        String sql = """
+            SELECT COALESCE(court_name, 'Unknown Court') as court, AVG(DATEDIFF('DAY', filing_date, CURRENT_DATE)) as avg_age
+            FROM court_case
+            WHERE is_deleted = 0 AND case_status NOT IN ('CLOSED', 'Closed', 'DISMISSED', 'SETTLED')
+            GROUP BY court_name
+            ORDER BY avg_age DESC
+        """;
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                java.util.Map<String, Object> map = new java.util.HashMap<>();
+                map.put("court", rs.getString("court"));
+                map.put("avg_age", rs.getDouble("avg_age"));
+                list.add(map);
+            }
+        } catch (SQLException e) {
+            LOGGER.severe("Error fetching average case age by court: " + e.getMessage());
+        }
+        return list;
+    }
+
+    public List<java.util.Map<String, Object>> getStageWiseAging() {
+        List<java.util.Map<String, Object>> list = new ArrayList<>();
+        String sql = """
+            SELECT cc.case_status as stage, AVG(DATEDIFF('DAY', COALESCE(h.changed_at, cc.created_at), CURRENT_TIMESTAMP)) as avg_days
+            FROM court_case cc
+            LEFT JOIN (
+                SELECT case_id, to_status, MAX(changed_at) as changed_at
+                FROM case_stage_history
+                GROUP BY case_id, to_status
+            ) h ON h.case_id = cc.case_id AND h.to_status = cc.case_status
+            WHERE cc.is_deleted = 0 AND cc.case_status NOT IN ('CLOSED', 'Closed', 'DISMISSED', 'SETTLED')
+            GROUP BY cc.case_status
+            ORDER BY avg_days DESC
+        """;
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                java.util.Map<String, Object> map = new java.util.HashMap<>();
+                map.put("stage", rs.getString("stage"));
+                map.put("avg_days", rs.getDouble("avg_days"));
+                list.add(map);
+            }
+        } catch (SQLException e) {
+            LOGGER.severe("Error fetching stage wise aging: " + e.getMessage());
+        }
+        return list;
+    }
 }

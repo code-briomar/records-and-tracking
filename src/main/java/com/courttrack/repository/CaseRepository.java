@@ -92,6 +92,26 @@ public class CaseRepository {
         });
     }
 
+    public void getDelayCounts(Consumer<java.util.Map<String, Integer>> onResult) {
+        executor.submit(() -> onResult.accept(dao.getDelayCounts()));
+    }
+
+    public void getAverageAgeByCourt(Consumer<List<java.util.Map<String, Object>>> onResult) {
+        executor.submit(() -> onResult.accept(dao.getAverageAgeByCourt()));
+    }
+
+    public void getStageWiseAging(Consumer<List<java.util.Map<String, Object>>> onResult) {
+        executor.submit(() -> onResult.accept(dao.getStageWiseAging()));
+    }
+
+    public void getRecentCaseActivity(int limit, Consumer<List<java.util.Map<String, Object>>> onResult) {
+        executor.submit(() -> onResult.accept(new com.courttrack.dao.AuditLogDao().findRecentCaseActivity(limit)));
+    }
+
+    public void getOfficerActivityStats(boolean weekly, Consumer<List<java.util.Map<String, Object>>> onResult) {
+        executor.submit(() -> onResult.accept(new com.courttrack.dao.AuditLogDao().getOfficerActivityStats(weekly)));
+    }
+
     public void shutdown() {
         executor.shutdown();
     }

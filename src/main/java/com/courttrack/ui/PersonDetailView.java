@@ -17,6 +17,7 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import javafx.stage.Modality;
+import com.courttrack.util.DialogUtil;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -341,6 +342,7 @@ public class PersonDetailView {
         confirm.setTitle("Confirm Deletion");
         confirm.setHeaderText(null);
         confirm.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(confirm);
 
         VBox box = new VBox(12);
         box.setPadding(new Insets(16, 24, 8, 24));

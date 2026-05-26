@@ -15,6 +15,7 @@ import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CaseParticipant;
 import com.courttrack.model.Person;
 import com.courttrack.repository.PersonRepository;
+import com.courttrack.util.DialogUtil;
 
 import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
@@ -621,6 +622,7 @@ public class OffenderListView {
         info.setTitle("Export Registry");
         info.setHeaderText(null);
         info.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(info);
         Label msg = new Label("Export functionality coming soon.\nThis will generate a PDF or CSV of the current records.");
         msg.setWrapText(true);
         VBox content = new VBox(msg);
@@ -673,6 +675,7 @@ public class OffenderListView {
         confirm.setTitle("Confirm Deletion");
         confirm.setHeaderText(null);
         confirm.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(confirm);
 
         VBox content = new VBox(12);
         content.setPadding(new Insets(16, 24, 8, 24));

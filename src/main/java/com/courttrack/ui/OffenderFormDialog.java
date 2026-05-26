@@ -4,6 +4,7 @@ import com.courttrack.dao.CaseDao;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.repository.CaseRepository;
+import com.courttrack.util.DialogUtil;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -256,6 +257,7 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
             }
             return null;
         });
+        DialogUtil.applyIcon(this);
     }
 
     private void handleNewCase() {
@@ -301,6 +303,7 @@ public class OffenderFormDialog extends Dialog<OffenderFormDialog.PersonCaseLink
         alert.setTitle("Validation");
         alert.setHeaderText(null);
         alert.setContentText(message);
+        DialogUtil.applyIcon(alert);
         alert.showAndWait();
     }
 }

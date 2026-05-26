@@ -15,6 +15,7 @@ import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import com.courttrack.util.DialogUtil;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
@@ -388,6 +389,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         Stage stage = (Stage) getDialogPane().getScene().getWindow();
         stage.setMinWidth(720);
         stage.setMinHeight(620);
+        DialogUtil.applyIcon(this);
 
         // Style button bar, scrollbar, and fill full width after skin is applied
         setOnShown(ev -> {
@@ -841,6 +843,7 @@ public class CaseFormDialog extends Dialog<CourtCase> {
     private void alert(String msg) {
         Alert a = new Alert(Alert.AlertType.WARNING);
         a.setTitle("Validation"); a.setHeaderText(null); a.setContentText(msg);
+        DialogUtil.applyIcon(a);
         a.showAndWait();
     }
 }

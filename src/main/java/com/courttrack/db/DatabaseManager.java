@@ -13,7 +13,7 @@ public class DatabaseManager {
     private static final Logger LOGGER = Logger.getLogger(DatabaseManager.class.getName());
     private static final String DB_DIR = getDataDir();
     private static final String DB_NAME = "court_records";
-    private static final String DB_URL = "jdbc:h2:file:" + DB_DIR + "/" + DB_NAME + ";MODE=MySQL;AUTO_SERVER=TRUE";
+    private static final String DB_URL = "jdbc:h2:file:" + DB_DIR + "/" + DB_NAME + ";MODE=MySQL";
     private static DatabaseManager instance;
 
     private static String getDataDir() {

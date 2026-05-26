@@ -11,6 +11,7 @@ import com.courttrack.repository.CaseRepository;
 import com.courttrack.repository.PersonRepository;
 import com.courttrack.sync.SyncCoordinator;
 import com.courttrack.util.WorkflowPredefs;
+import com.courttrack.util.DialogUtil;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -565,6 +566,7 @@ public class CaseDetailView {
         dialog.setHeaderText("Log a stage transition for case: " + c.getCaseNumber());
         dialog.initModality(Modality.APPLICATION_MODAL);
         dialog.setResizable(true);
+        DialogUtil.applyIcon(dialog);
 
         VBox box = new VBox(12);
         box.setPadding(new Insets(16, 24, 16, 24));
@@ -632,6 +634,7 @@ public class CaseDetailView {
                 alert.setTitle("Validation");
                 alert.setHeaderText(null);
                 alert.setContentText("Please select a status.");
+                DialogUtil.applyIcon(alert);
                 alert.showAndWait();
                 ev.consume();
             }
@@ -662,6 +665,7 @@ public class CaseDetailView {
         confirm.setTitle("Confirm Deletion");
         confirm.setHeaderText(null);
         confirm.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(confirm);
 
         VBox box = new VBox(12);
         box.setPadding(new Insets(16, 24, 8, 24));

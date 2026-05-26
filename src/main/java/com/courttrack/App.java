@@ -86,7 +86,7 @@ public class App extends Application {
         System.out.println("================================");
 
         try {
-            Image icon = new Image(getClass().getResourceAsStream("/icons/app.ico"));
+            Image icon = new Image(getClass().getResourceAsStream("/icons/app.png"));
             stage.getIcons().add(icon);
         } catch (Exception e) {
             System.err.println("Could not load app icon: " + e.getMessage());

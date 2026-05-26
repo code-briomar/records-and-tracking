@@ -15,6 +15,7 @@ import com.courttrack.model.Person;
 import com.courttrack.repository.CaseRepository;
 import com.courttrack.sync.SyncStatus;
 import com.courttrack.update.UpdateInfo;
+import com.courttrack.util.DialogUtil;
 import com.courttrack.util.VersionPreferences;
 
 import javafx.animation.Animation;
@@ -79,6 +80,7 @@ public class MainView {
     private DashboardView cachedDashboard;
     private CaseListView cachedCases;
     private OffenderListView cachedOffenders;
+    private ReportsView cachedReports;
 
     public MainView(String username, Runnable onLogout) {
         this.username = username;
@@ -189,7 +191,8 @@ public class MainView {
         navSection.getChildren().addAll(
                 createNavButton("Dashboard", "dashboard", Feather.HOME),
                 createNavButton("Cases", "cases", Feather.FOLDER),
-                createNavButton("Offenders", "offenders", Feather.USERS));
+                createNavButton("Offenders", "offenders", Feather.USERS),
+                createNavButton("Reports", "reports", Feather.BAR_CHART_2));
 
         Region spacer = new Region();
         VBox.setVgrow(spacer, Priority.ALWAYS);
@@ -406,14 +409,11 @@ public class MainView {
         root.setLeft(sidebar);
         // Restore active button state
         int idx = switch (currentPage) {
-            case "dashboard" ->
-                0;
-            case "cases" ->
-                1;
-            case "offenders" ->
-                2;
-            default ->
-                0;
+            case "dashboard" -> 0;
+            case "cases" -> 1;
+            case "offenders" -> 2;
+            case "reports" -> 3;
+            default -> 0;
         };
         if (idx < navButtons.size()) {
             activeButton = navButtons.get(idx);
@@ -426,6 +426,7 @@ public class MainView {
         dialog.setTitle("Settings");
         dialog.setHeaderText(null);
         dialog.initModality(Modality.APPLICATION_MODAL);
+        DialogUtil.applyIcon(dialog);
 
         String bg       = tm.isDark() ? "#161616" : "#f4f4f4";
         String cardBg   = tm.isDark() ? "#1e1e1e" : "#ffffff";
@@ -821,6 +822,7 @@ public class MainView {
                     this::showCaseDetail);
             cachedCases = new CaseListView(this::showCaseDetail);
             cachedOffenders = new OffenderListView(this::showPersonDetail);
+            cachedReports = new ReportsView();
 
             cachedDashboard.getRoot().setVisible(false);
             cachedDashboard.getRoot().setManaged(false);
@@ -828,11 +830,14 @@ public class MainView {
             cachedCases.getRoot().setManaged(false);
             cachedOffenders.getRoot().setVisible(false);
             cachedOffenders.getRoot().setManaged(false);
+            cachedReports.getRoot().setVisible(false);
+            cachedReports.getRoot().setManaged(false);
 
             contentArea.getChildren().addAll(
                     cachedDashboard.getRoot(),
                     cachedCases.getRoot(),
-                    cachedOffenders.getRoot());
+                    cachedOffenders.getRoot(),
+                    cachedReports.getRoot());
         }
 
         cachedDashboard.getRoot().setVisible(false);
@@ -841,6 +846,10 @@ public class MainView {
         cachedCases.getRoot().setManaged(false);
         cachedOffenders.getRoot().setVisible(false);
         cachedOffenders.getRoot().setManaged(false);
+        if (cachedReports != null) {
+            cachedReports.getRoot().setVisible(false);
+            cachedReports.getRoot().setManaged(false);
+        }
 
         switch (page) {
             case "dashboard" -> {
@@ -857,6 +866,11 @@ public class MainView {
                 cachedOffenders.getRoot().setVisible(true);
                 cachedOffenders.getRoot().setManaged(true);
                 cachedOffenders.refresh();
+            }
+            case "reports" -> {
+                cachedReports.getRoot().setVisible(true);
+                cachedReports.getRoot().setManaged(true);
+                cachedReports.refresh();
             }
         }
 
@@ -887,6 +901,10 @@ public class MainView {
             cachedOffenders.getRoot().setVisible(false);
             cachedOffenders.getRoot().setManaged(false);
         }
+        if (cachedReports != null) {
+            cachedReports.getRoot().setVisible(false);
+            cachedReports.getRoot().setManaged(false);
+        }
     }
 
     private void updateNavHighlight(String page) {
@@ -894,14 +912,11 @@ public class MainView {
             btn.setStyle(navInactiveStyle());
         }
         int idx = switch (page) {
-            case "dashboard" ->
-                0;
-            case "cases" ->
-                1;
-            case "offenders" ->
-                2;
-            default ->
-                0;
+            case "dashboard" -> 0;
+            case "cases" -> 1;
+            case "offenders" -> 2;
+            case "reports" -> 3;
+            default -> 0;
         };
         if (idx < navButtons.size()) {
             activeButton = navButtons.get(idx);
@@ -935,6 +950,9 @@ public class MainView {
                 e.consume();
             } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT3) {
                 navigateTo("offenders");
+                e.consume();
+            } else if (e.isControlDown() && e.getCode() == KeyCode.DIGIT4) {
+                navigateTo("reports");
                 e.consume();
             }
         });
