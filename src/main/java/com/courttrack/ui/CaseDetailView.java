@@ -1,13 +1,16 @@
 package com.courttrack.ui;
 
 import com.courttrack.dao.CaseDao;
+import com.courttrack.dao.CaseStageHistoryDao;
 import com.courttrack.model.CaseParticipant;
+import com.courttrack.model.CaseStageHistory;
 import com.courttrack.model.Charge;
 import com.courttrack.model.CourtCase;
 import com.courttrack.model.Person;
 import com.courttrack.repository.CaseRepository;
 import com.courttrack.repository.PersonRepository;
 import com.courttrack.sync.SyncCoordinator;
+import com.courttrack.util.WorkflowPredefs;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -32,6 +35,7 @@ public class CaseDetailView {
     private final VBox root;
     private final CourtCase courtCase;
     private final CaseDao caseDao = new CaseDao();
+    private final CaseStageHistoryDao stageHistoryDao = new CaseStageHistoryDao();
     private final CaseRepository caseRepo = CaseRepository.getInstance();
     private final ThemeManager tm = ThemeManager.getInstance();
     private final Runnable onBack;
@@ -98,6 +102,18 @@ public class CaseDetailView {
         final CourtCase caseRef = c;
         editBtn.setOnAction(e -> handleEdit(caseRef));
 
+        Button transitionBtn = new Button("Transition Stage");
+        transitionBtn.setStyle(String.format("""
+            -fx-background-color: transparent;
+            -fx-text-fill: %s;
+            -fx-border-color: %s;
+            -fx-border-radius: 6;
+            -fx-background-radius: 6;
+            -fx-padding: 6 12;
+            -fx-cursor: hand;
+        """, tm.accentBlue(), tm.accentBlue()));
+        transitionBtn.setOnAction(e -> handleTransitionStage(caseRef));
+
         FontIcon delIcon = new FontIcon(Feather.TRASH_2);
         delIcon.setIconSize(14);
         delIcon.setIconColor(Color.web(tm.accentRed()));
@@ -114,7 +130,7 @@ public class CaseDetailView {
         """, tm.accentRed(), tm.accentRed()));
         deleteBtn.setOnAction(e -> handleDelete(caseRef));
 
-        topBar.getChildren().addAll(backBtn, topSpacer, deleteBtn, editBtn);
+        topBar.getChildren().addAll(backBtn, topSpacer, deleteBtn, transitionBtn, editBtn);
         content.getChildren().add(topBar);
 
         // --- Header ---
@@ -143,7 +159,7 @@ public class CaseDetailView {
                 categoryBg(c.getCaseCategory()), categoryColor(c.getCaseCategory())));
         }
         if (c.getCaseStatus() != null) {
-            boolean isOpen = "OPEN".equals(c.getCaseStatus());
+            boolean isOpen = "Registered".equals(c.getCaseStatus()) || "Mention".equals(c.getCaseStatus()) || "Hearing".equals(c.getCaseStatus()) || "Ruling".equals(c.getCaseStatus()) || "Appeal".equals(c.getCaseStatus());
             badges.getChildren().add(buildBadge(c.getCaseStatus(),
                 isOpen ? tm.badgeOpenBg() : tm.badgeClosedBg(),
                 isOpen ? tm.badgeOpenText() : tm.badgeClosedText()));
@@ -164,6 +180,10 @@ public class CaseDetailView {
 
         header.getChildren().add(badges);
         content.getChildren().add(header);
+
+        VBox timelineCard = buildTimelineCard(c);
+        VBox.setMargin(timelineCard, new Insets(8, 40, 8, 40));
+        content.getChildren().add(timelineCard);
 
         // --- Sections in a 2-column card layout ---
         FlowPane cards = new FlowPane();
@@ -340,6 +360,121 @@ public class CaseDetailView {
         return card;
     }
 
+    private VBox buildTimelineCard(CourtCase c) {
+        VBox card = buildCard("Case Timeline", Feather.CLOCK, tm.accentBlue());
+        List<CaseStageHistory> history = stageHistoryDao.findByCaseId(c.getCaseId());
+        VBox list = new VBox(0);
+        list.setPadding(new Insets(16));
+
+        if (history.isEmpty()) {
+            Label empty = new Label("No stage history has been recorded for this case yet.");
+            empty.setWrapText(true);
+            empty.setFont(Font.font("System", 12));
+            empty.getStyleClass().add("text-muted");
+            list.getChildren().add(empty);
+            card.getChildren().add(list);
+            return card;
+        }
+
+        for (int i = 0; i < history.size(); i++) {
+            CaseStageHistory event = history.get(i);
+
+            StackPane markerPane = new StackPane();
+            markerPane.setPrefWidth(30);
+            markerPane.setMinWidth(30);
+            markerPane.setAlignment(Pos.TOP_CENTER);
+
+            VBox lineBox = new VBox();
+            lineBox.setAlignment(Pos.TOP_CENTER);
+
+            Region topSegment = new Region();
+            topSegment.setPrefWidth(2);
+            topSegment.setMaxWidth(2);
+            topSegment.setStyle("-fx-background-color: " + (tm.isDark() ? "#383838" : "#dedede") + ";");
+
+            Region bottomSegment = new Region();
+            bottomSegment.setPrefWidth(2);
+            bottomSegment.setMaxWidth(2);
+            bottomSegment.setStyle("-fx-background-color: " + (tm.isDark() ? "#383838" : "#dedede") + ";");
+
+            topSegment.setMinHeight(10);
+            topSegment.setPrefHeight(10);
+            bottomSegment.setMinHeight(20);
+            bottomSegment.setPrefHeight(20);
+            VBox.setVgrow(bottomSegment, Priority.ALWAYS);
+
+            if (history.size() > 1) {
+                if (i == 0) {
+                    Region topSpace = new Region();
+                    topSpace.setMinHeight(10); topSpace.setPrefHeight(10);
+                    lineBox.getChildren().addAll(topSpace, bottomSegment);
+                } else if (i == history.size() - 1) {
+                    Region bottomSpace = new Region();
+                    bottomSpace.setMinHeight(20); bottomSpace.setPrefHeight(20);
+                    VBox.setVgrow(bottomSpace, Priority.ALWAYS);
+                    lineBox.getChildren().addAll(topSegment, bottomSpace);
+                } else {
+                    lineBox.getChildren().addAll(topSegment, bottomSegment);
+                }
+            }
+
+            javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(5);
+            StackPane.setMargin(dot, new Insets(6, 0, 0, 0));
+
+            if (i == history.size() - 1) {
+                dot.setRadius(6);
+                dot.setFill(Color.web(tm.accentBlue()));
+                dot.setStroke(Color.web(tm.accentBlue() + "44"));
+                dot.setStrokeWidth(3);
+            } else {
+                dot.setFill(Color.web(tm.isDark() ? "#505050" : "#b0b0b0"));
+            }
+
+            markerPane.getChildren().addAll(lineBox, dot);
+
+            VBox contentBox = new VBox(4);
+            contentBox.setPadding(new Insets(2, 0, 16, 8));
+            HBox.setHgrow(contentBox, Priority.ALWAYS);
+
+            String transition = event.getFromStatus() == null
+                ? "Filed → " + event.getToStatus()
+                : event.getFromStatus() + " → " + event.getToStatus();
+            Label title = new Label(transition);
+            title.setFont(Font.font("System", FontWeight.BOLD, 13));
+
+            String actor = or(event.getChangedBy());
+            String when = event.getChangedAt() != null
+                ? event.getChangedAt().format(DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm"))
+                : "Unknown time";
+            Label meta = new Label(when + " • " + actor);
+            meta.setFont(Font.font("System", 11));
+            meta.getStyleClass().add("text-muted");
+
+            contentBox.getChildren().addAll(title, meta);
+
+            if (event.getNotes() != null && !event.getNotes().isBlank()) {
+                Label notes = new Label(event.getNotes());
+                notes.setWrapText(true);
+                notes.setFont(Font.font("System", 12));
+                notes.setPadding(new Insets(6, 10, 6, 10));
+
+                String bubbleBg = tm.isDark() ? "#282828" : "#f5f5f5";
+                String bubbleBorder = tm.isDark() ? "#383838" : "#e0e0e0";
+                notes.setStyle(String.format(
+                    "-fx-background-color: %s; -fx-border-color: %s; -fx-border-radius: 6; -fx-background-radius: 6; -fx-text-fill: %s;",
+                    bubbleBg, bubbleBorder, tm.isDark() ? "#d0d0d0" : "#444444"
+                ));
+                contentBox.getChildren().add(notes);
+            }
+
+            HBox row = new HBox(0, markerPane, contentBox);
+            list.getChildren().add(row);
+        }
+
+        card.getChildren().add(list);
+        return card;
+    }
+
     private GridPane buildDetailGrid() {
         GridPane grid = new GridPane();
         grid.setHgap(16);
@@ -421,6 +556,104 @@ public class CaseDetailView {
                     });
                 }
             });
+        });
+    }
+
+    private void handleTransitionStage(CourtCase c) {
+        Dialog<ButtonType> dialog = new Dialog<>();
+        dialog.setTitle("Transition Stage");
+        dialog.setHeaderText("Log a stage transition for case: " + c.getCaseNumber());
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.setResizable(true);
+
+        VBox box = new VBox(12);
+        box.setPadding(new Insets(16, 24, 16, 24));
+        box.setPrefWidth(440);
+
+        Label currentStatusLabel = new Label("Current Status: " + c.getCaseStatus());
+        currentStatusLabel.setFont(Font.font("System", FontWeight.BOLD, 13));
+
+        ComboBox<String> statusSelect = new ComboBox<>(javafx.collections.FXCollections.observableArrayList(
+                "Registered", "Mention", "Hearing", "Ruling", "Appeal", "Closed"
+        ));
+        statusSelect.setValue(c.getCaseStatus());
+        statusSelect.setMaxWidth(Double.MAX_VALUE);
+
+        Label notesTitleLabel = new Label("Select Transition Note *");
+        notesTitleLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        notesTitleLabel.setStyle("-fx-text-fill: " + (tm.isDark() ? "#8a8a8a" : "#5a5a5a") + ";");
+
+        VBox notesContainer = new VBox(8);
+        ToggleGroup notesGroup = new ToggleGroup();
+
+        Runnable loadPredefNotes = () -> {
+            notesContainer.getChildren().clear();
+            notesGroup.getToggles().clear();
+            String selStatus = statusSelect.getValue();
+            if (selStatus != null) {
+                List<String> notes = com.courttrack.util.WorkflowPredefs.getShuffledNotesFor(selStatus);
+                for (String note : notes) {
+                    RadioButton rb = new RadioButton(note);
+                    rb.setWrapText(true);
+                    rb.setMaxWidth(390);
+                    rb.setToggleGroup(notesGroup);
+                    rb.setStyle("-fx-font-size: 12px;");
+                    notesContainer.getChildren().add(rb);
+                }
+                if (!notesContainer.getChildren().isEmpty()) {
+                    ((RadioButton) notesContainer.getChildren().get(0)).setSelected(true);
+                }
+            }
+            if (dialog.getDialogPane().getScene() != null && dialog.getDialogPane().getScene().getWindow() != null) {
+                dialog.getDialogPane().getScene().getWindow().sizeToScene();
+            }
+        };
+
+        statusSelect.valueProperty().addListener((obs, oldV, newV) -> loadPredefNotes.run());
+        loadPredefNotes.run(); // initial load
+
+        box.getChildren().addAll(
+                currentStatusLabel,
+                new Label("New Status / Stage:"),
+                statusSelect,
+                notesTitleLabel,
+                notesContainer
+        );
+        dialog.getDialogPane().setContent(box);
+
+        dialog.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+        Button okBtn = (Button) dialog.getDialogPane().lookupButton(ButtonType.OK);
+        okBtn.setText("Save Transition");
+        okBtn.getStyleClass().add("accent");
+
+        okBtn.addEventFilter(javafx.event.ActionEvent.ACTION, ev -> {
+            if (statusSelect.getValue() == null) {
+                Alert alert = new Alert(Alert.AlertType.WARNING);
+                alert.setTitle("Validation");
+                alert.setHeaderText(null);
+                alert.setContentText("Please select a status.");
+                alert.showAndWait();
+                ev.consume();
+            }
+        });
+
+        dialog.showAndWait().ifPresent(bt -> {
+            if (bt == ButtonType.OK) {
+                String newStatus = statusSelect.getValue();
+                RadioButton selectedRb = (RadioButton) notesGroup.getSelectedToggle();
+                String notes = selectedRb != null ? selectedRb.getText() : "Stage transitioned to " + newStatus;
+
+                caseRepo.transitionStatus(c.getCaseId(), newStatus, notes, () -> {
+                    caseRepo.getById(c.getCaseId(), refreshed -> {
+                        if (refreshed != null) {
+                            Platform.runLater(() -> {
+                                root.getChildren().clear();
+                                populateUI(refreshed);
+                            });
+                        }
+                    });
+                });
+            }
         });
     }
 

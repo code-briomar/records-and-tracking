@@ -2,19 +2,106 @@ package com.courttrack.dao;
 
 import com.courttrack.db.DatabaseManager;
 import com.courttrack.model.CaseParticipant;
+import com.courttrack.model.CaseStageHistory;
 import com.courttrack.model.Charge;
 import com.courttrack.model.CourtCase;
+import com.courttrack.model.AuditLog;
+import com.courttrack.sync.CourtContext;
 
 import java.sql.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.IntConsumer;
 import java.util.logging.Logger;
 
 public class CaseDao {
     private static final Logger LOGGER = Logger.getLogger(CaseDao.class.getName());
     private final DatabaseManager db = DatabaseManager.getInstance();
+    private final CaseStageHistoryDao stageHistoryDao = new CaseStageHistoryDao();
+    private final AuditLogDao auditLogDao = new AuditLogDao();
+
+    private String currentUserId() {
+        return CourtContext.getInstance().getUserId();
+    }
+
+    private String currentUsername() {
+        String email = CourtContext.getInstance().getUserEmail();
+        return email != null ? email : "system";
+    }
+
+    private void recordStageHistory(String caseId, String fromStatus, String toStatus, String notes) {
+        if (caseId == null || toStatus == null) return;
+        CaseStageHistory history = new CaseStageHistory();
+        history.setCaseId(caseId);
+        history.setFromStatus(fromStatus);
+        history.setToStatus(toStatus);
+        history.setChangedByUserId(currentUserId());
+        history.setChangedBy(currentUsername());
+        history.setChangedAt(LocalDateTime.now());
+        history.setNotes(notes);
+        history.setCourtId(CourtContext.getInstance().getCourtId());
+        stageHistoryDao.insertStageTransition(history);
+    }
+
+    private void auditCaseAction(String action, String caseId, String status, String details) {
+        AuditLog log = new AuditLog();
+        log.setUserId(currentUserId());
+        log.setUsername(currentUsername());
+        log.setAction(action);
+        log.setEntityType("CourtCase");
+        log.setEntityId(caseId);
+        log.setStatus(status);
+        log.setDetails(details);
+        log.setCourtId(CourtContext.getInstance().getCourtId());
+        auditLogDao.insert(log);
+    }
+
+    private String computeChangedFields(CourtCase oldCase, CourtCase newCase) {
+        if (oldCase == null) return "All fields initialized.";
+        List<String> changes = new ArrayList<>();
+        compareField("Case Number", oldCase.getCaseNumber(), newCase.getCaseNumber(), changes);
+        compareField("Case Title", oldCase.getCaseTitle(), newCase.getCaseTitle(), changes);
+        compareField("Court ID", oldCase.getCourtId(), newCase.getCourtId(), changes);
+        compareField("Court Name", oldCase.getCourtName(), newCase.getCourtName(), changes);
+        compareField("Filing Date", oldCase.getFilingDate(), newCase.getFilingDate(), changes);
+        compareField("Status", oldCase.getCaseStatus(), newCase.getCaseStatus(), changes);
+        compareField("Category", oldCase.getCaseCategory(), newCase.getCaseCategory(), changes);
+        compareField("Case Type", oldCase.getCaseType(), newCase.getCaseType(), changes);
+        compareField("Priority", oldCase.getPriority(), newCase.getPriority(), changes);
+        compareField("Description", oldCase.getDescription(), newCase.getDescription(), changes);
+        compareField("Judgment Date", oldCase.getDateOfJudgment(), newCase.getDateOfJudgment(), changes);
+        compareField("Sentence", oldCase.getSentence(), newCase.getSentence(), changes);
+        compareField("Mitigation Notes", oldCase.getMitigationNotes(), newCase.getMitigationNotes(), changes);
+        compareField("Prosecution Counsel", oldCase.getProsecutionCounsel(), newCase.getProsecutionCounsel(), changes);
+        compareField("Appeal Status", oldCase.getAppealStatus(), newCase.getAppealStatus(), changes);
+        compareField("Location", oldCase.getLocationOfOffence(), newCase.getLocationOfOffence(), changes);
+        compareField("Evidence Summary", oldCase.getEvidenceSummary(), newCase.getEvidenceSummary(), changes);
+        compareField("Hearing Dates", oldCase.getHearingDates(), newCase.getHearingDates(), changes);
+        compareField("Court Assistant", oldCase.getCourtAssistant(), newCase.getCourtAssistant(), changes);
+        compareField("Accused Name", oldCase.getAccusedName(), newCase.getAccusedName(), changes);
+        compareField("Complainant Name", oldCase.getComplainantName(), newCase.getComplainantName(), changes);
+        compareField("Defense Witnesses", oldCase.getDefenseWitnesses(), newCase.getDefenseWitnesses(), changes);
+        compareField("Prosecution Witnesses", oldCase.getProsecutionWitnesses(), newCase.getProsecutionWitnesses(), changes);
+        compareField("Applicable Law", oldCase.getApplicableLaw(), newCase.getApplicableLaw(), changes);
+        compareField("Judge Name", oldCase.getJudgeName(), newCase.getJudgeName(), changes);
+        compareField("Offender History", oldCase.getOffenderHistory(), newCase.getOffenderHistory(), changes);
+
+        if (changes.isEmpty()) {
+            return "No text fields changed.";
+        }
+        return "Changed fields:\n" + String.join("\n", changes);
+    }
+
+    private void compareField(String label, Object oldVal, Object newVal, List<String> changes) {
+        String o = oldVal == null ? "" : oldVal.toString().trim();
+        String n = newVal == null ? "" : newVal.toString().trim();
+        if (!o.equals(n)) {
+            changes.add(String.format("- %s: '%s' -> '%s'", label, o.isEmpty() ? "<empty>" : o, n.isEmpty() ? "<empty>" : n));
+        }
+    }
 
     private static final String SELECT_WITH_CHARGE = """
         SELECT cc.*, ch.particulars AS charge_particulars, ch.verdict AS charge_verdict, ch.plea AS charge_plea, ch.sentence_notes AS sentence_notes
@@ -200,12 +287,28 @@ public class CaseDao {
             ps.setString(26, c.getJudgeName());
             ps.setString(27, c.getOffenderHistory());
             ps.executeUpdate();
+            recordStageHistory(c.getCaseId(), null, c.getCaseStatus(), "Case created");
+            auditCaseAction("CREATE", c.getCaseId(), c.getCaseStatus(), "Created case " + c.getCaseNumber());
         } catch (SQLException e) {
             LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
     public void update(CourtCase c) {
+        CourtCase existing = findById(c.getCaseId());
+        String previousStatus = existing != null ? existing.getCaseStatus() : null;
+        String statusChangeNotes = null;
+        if (!Objects.equals(previousStatus, c.getCaseStatus())) {
+            statusChangeNotes = c.getTransitionNotes();
+            if (statusChangeNotes == null || statusChangeNotes.isBlank()) {
+                statusChangeNotes = String.format("Status changed from %s to %s",
+                        previousStatus == null ? "<none>" : previousStatus,
+                        c.getCaseStatus());
+            }
+        }
+
+        String changedFieldsDesc = computeChangedFields(existing, c);
+
         String sql = """
             UPDATE court_case SET case_number = ?, case_title = ?, court_id = ?, court_name = ?,
             filing_date = ?, case_status = ?, case_category = ?, case_type = ?, priority = ?,
@@ -247,19 +350,53 @@ public class CaseDao {
             ps.setString(26, c.getOffenderHistory());
             ps.setString(27, c.getCaseId());
             ps.executeUpdate();
+            if (statusChangeNotes != null) {
+                recordStageHistory(c.getCaseId(), previousStatus, c.getCaseStatus(), statusChangeNotes);
+            }
+            auditCaseAction("UPDATE", c.getCaseId(), c.getCaseStatus(),
+                    "Updated case " + c.getCaseNumber() + "\n" + changedFieldsDesc +
+                    (statusChangeNotes != null ? "\nNotes: " + statusChangeNotes : ""));
         } catch (SQLException e) {
             LOGGER.severe("Database error: " + e.getMessage());
         }
     }
 
     public void softDelete(String caseId) {
+        CourtCase existing = findById(caseId);
+        String previousStatus = existing != null ? existing.getCaseStatus() : null;
+        String historyNote = previousStatus != null ? "Case deleted from status " + previousStatus : "Case deleted";
         String sql = "UPDATE court_case SET is_deleted = TRUE, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, caseId);
             ps.executeUpdate();
+            if (previousStatus != null) {
+                recordStageHistory(caseId, previousStatus, "DELETED", historyNote);
+            }
+            auditCaseAction("DELETE", caseId, previousStatus, historyNote);
         } catch (SQLException e) {
             LOGGER.severe("Database error: " + e.getMessage());
+        }
+    }
+
+    public void updateCaseStatus(String caseId, String newStatus, String notes) {
+        CourtCase existing = findById(caseId);
+        if (existing == null) return;
+        String previousStatus = existing.getCaseStatus();
+        if (Objects.equals(previousStatus, newStatus)) return;
+
+        String sql = "UPDATE court_case SET case_status = ?, has_changes = TRUE, updated_at = CURRENT_TIMESTAMP WHERE case_id = ?";
+        try (Connection conn = db.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, newStatus);
+            ps.setString(2, caseId);
+            ps.executeUpdate();
+
+            recordStageHistory(caseId, previousStatus, newStatus, notes);
+            auditCaseAction("UPDATE", caseId, newStatus,
+                    String.format("Status transitioned from %s to %s. Notes: %s", previousStatus, newStatus, notes));
+        } catch (SQLException e) {
+            LOGGER.severe("Database error transitioning status: " + e.getMessage());
         }
     }
 
@@ -308,7 +445,7 @@ public class CaseDao {
 
     public int countFiledThisMonth() {
         String sql = "SELECT COUNT(*) FROM court_case WHERE is_deleted = 0 " +
-                     "AND strftime('%Y-%m', filing_date) = strftime('%Y-%m', 'now')";
+                     "AND YEAR(filing_date) = YEAR(CURRENT_DATE) AND MONTH(filing_date) = MONTH(CURRENT_DATE)";
         try (Connection conn = db.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {

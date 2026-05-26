@@ -76,6 +76,14 @@ public class CaseRepository {
         executor.submit(() -> onResult.accept(dao.countFiledToday()));
     }
 
+    public void transitionStatus(String caseId, String newStatus, String notes, Runnable onComplete) {
+        executor.submit(() -> {
+            dao.updateCaseStatus(caseId, newStatus, notes);
+            SyncCoordinator.getInstance().queueCaseSync(caseId, "UPSERT", null);
+            if (onComplete != null) onComplete.run();
+        });
+    }
+
     public void delete(String caseId, Runnable onComplete) {
         executor.submit(() -> {
             dao.softDelete(caseId);

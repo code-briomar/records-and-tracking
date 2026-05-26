@@ -48,7 +48,7 @@ public class DashboardView {
     private Label onAppealValue;
 
     // Case pipeline breakdown
-    private static final String[] PIPELINE = { "Active", "Pending", "Review", "Closed" };
+    private static final String[] PIPELINE = { "Registered", "Mention", "Hearing", "Ruling", "Appeal", "Closed" };
     private final Region[] stFills = new Region[PIPELINE.length];
     private final Region[] stTracks = new Region[PIPELINE.length];
     private final HBox[] stBarBoxes = new HBox[PIPELINE.length];
@@ -83,7 +83,7 @@ public class DashboardView {
     private void loadDataAsync() {
         new Thread(() -> {
             int today = caseDao.countFiledToday();
-            int pending = caseDao.countByStatus("Pending");
+            int pending = caseDao.countByStatus("Hearing") + caseDao.countByStatus("Mention");
             int month = caseDao.countFiledThisMonth();
             int appeal = caseDao.countOnAppeal();
             List<CourtCase> recent = caseDao.findRecent(6);
@@ -412,9 +412,11 @@ public class DashboardView {
 
     private String pipelineColor(String status) {
         return switch (status) {
-            case "Active" -> tm.accentGreen();
-            case "Pending" -> tm.accentOrange();
-            case "Review" -> tm.accentBlue();
+            case "Registered" -> tm.accentGreen();
+            case "Mention" -> tm.accentOrange();
+            case "Hearing" -> "#c9a227";
+            case "Ruling" -> tm.accentBlue();
+            case "Appeal" -> tm.accentPurple();
             case "Closed" -> "#9a9a9a";
             default -> "#888888";
         };

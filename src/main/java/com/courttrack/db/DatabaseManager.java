@@ -278,6 +278,21 @@ public class DatabaseManager {
                 )
             """);
 
+            stmt.execute("""
+                CREATE TABLE IF NOT EXISTS case_stage_history (
+                    history_id VARCHAR(255) PRIMARY KEY,
+                    case_id VARCHAR(255) NOT NULL,
+                    from_status VARCHAR(100),
+                    to_status VARCHAR(100) NOT NULL,
+                    changed_by_user_id VARCHAR(255),
+                    changed_by VARCHAR(255),
+                    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    notes TEXT,
+                    court_id VARCHAR(255),
+                    FOREIGN KEY (case_id) REFERENCES court_case(case_id)
+                )
+            """);
+
             // --- Sync queue table ---
 
             stmt.execute("""

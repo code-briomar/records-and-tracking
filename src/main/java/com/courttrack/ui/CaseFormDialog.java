@@ -77,8 +77,13 @@ public class CaseFormDialog extends Dialog<CourtCase> {
             "Civil", "Criminal", "Succession", "Children", "Traffic", "Other"));
     private final TextField     caseTitleField   = new TextField();
     private final ComboBox<String> statusBox     = new ComboBox<>(FXCollections.observableArrayList(
-            "Active", "Closed", "Pending", "Review"));
+            "Registered", "Mention", "Hearing", "Ruling", "Appeal", "Closed"));
     private final DatePicker    filingDatePicker = new DatePicker();
+
+    // Transition notes (shuffled predefs)
+    private final Label transitionNotesTitleLabel = new Label("Select Transition Note *");
+    private final VBox transitionNotesContainer = new VBox(6);
+    private final ToggleGroup transitionNotesGroup = new ToggleGroup();
 
     // ---------------------------------------------------------------
     // Section 2 — Case Description
@@ -186,6 +191,53 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         g1.add(caseTitleField, 1, r++);
         g1.add(lbl("Status *"),     0, r); g1.add(statusBox,        1, r);
         g1.add(lbl("Date Filed *"), 2, r); g1.add(filingDatePicker,  3, r);
+
+        r++;
+        g1.add(transitionNotesTitleLabel, 0, r);
+        GridPane.setColumnSpan(transitionNotesContainer, 3);
+        g1.add(transitionNotesContainer, 1, r);
+
+        if (existing != null) {
+            transitionNotesTitleLabel.setVisible(false);
+            transitionNotesTitleLabel.setManaged(false);
+            transitionNotesContainer.setVisible(false);
+            transitionNotesContainer.setManaged(false);
+
+            statusBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+                boolean changed = !java.util.Objects.equals(existing.getCaseStatus(), newVal);
+                transitionNotesTitleLabel.setVisible(changed);
+                transitionNotesTitleLabel.setManaged(changed);
+                transitionNotesContainer.setVisible(changed);
+                transitionNotesContainer.setManaged(changed);
+
+                if (changed) {
+                    transitionNotesContainer.getChildren().clear();
+                    transitionNotesGroup.getToggles().clear();
+                    java.util.List<String> notes = com.courttrack.util.WorkflowPredefs.getShuffledNotesFor(newVal);
+                    for (String note : notes) {
+                        RadioButton rb = new RadioButton(note);
+                        rb.setWrapText(true);
+                        rb.setMaxWidth(480);
+                        rb.setToggleGroup(transitionNotesGroup);
+                        rb.setStyle("-fx-font-size: 12px;");
+                        transitionNotesContainer.getChildren().add(rb);
+                    }
+                    if (!transitionNotesContainer.getChildren().isEmpty()) {
+                        ((RadioButton) transitionNotesContainer.getChildren().get(0)).setSelected(true);
+                    }
+                }
+
+                if (getDialogPane().getScene() != null && getDialogPane().getScene().getWindow() != null) {
+                    getDialogPane().getScene().getWindow().sizeToScene();
+                }
+            });
+        } else {
+            transitionNotesTitleLabel.setVisible(false);
+            transitionNotesTitleLabel.setManaged(false);
+            transitionNotesContainer.setVisible(false);
+            transitionNotesContainer.setManaged(false);
+        }
+
         VBox sec1 = buildAlwaysOpenCard("Case Information", Feather.BRIEFCASE, g1, tm.accentBlue());
 
         // ============================================================
@@ -483,6 +535,18 @@ public class CaseFormDialog extends Dialog<CourtCase> {
         c.setCaseCategory(categoryBox.getValue());
         c.setCaseTitle(trim(caseTitleField.getText()));
         c.setCaseStatus(statusBox.getValue());
+
+        if (existing != null && !java.util.Objects.equals(existing.getCaseStatus(), statusBox.getValue())) {
+            RadioButton selectedRb = (RadioButton) transitionNotesGroup.getSelectedToggle();
+            if (selectedRb != null) {
+                c.setTransitionNotes(selectedRb.getText());
+            } else {
+                c.setTransitionNotes("Stage transitioned to " + statusBox.getValue());
+            }
+        } else {
+            c.setTransitionNotes(null);
+        }
+
         c.setFilingDate(filingDatePicker.getValue());
 
         c.setDescription(trim(descriptionArea.getText()));
@@ -722,11 +786,14 @@ public class CaseFormDialog extends Dialog<CourtCase> {
     // ================================================================
 
     private static String mapStatus(String s) {
-        if (s == null) return "Active";
+        if (s == null) return "Registered";
         return switch (s) {
-            case "OPEN"      -> "Active";
+            case "OPEN"      -> "Registered";
             case "CLOSED"    -> "Closed";
-            case "ADJOURNED" -> "Pending";
+            case "Active"    -> "Mention";
+            case "Pending"   -> "Hearing";
+            case "Review"    -> "Ruling";
+            case "ADJOURNED" -> "Hearing";
             case "DISMISSED" -> "Closed";
             case "SETTLED"   -> "Closed";
             default          -> s; // already new format

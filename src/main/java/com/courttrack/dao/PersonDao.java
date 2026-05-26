@@ -186,7 +186,7 @@ public class PersonDao {
     }
 
     public int countAddedThisMonth() {
-        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')";
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND YEAR(created_at) = YEAR(CURRENT_TIMESTAMP) AND MONTH(created_at) = MONTH(CURRENT_TIMESTAMP)";
         try (Connection conn = db.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -198,7 +198,7 @@ public class PersonDao {
     }
 
     public int countAddedThisWeek() {
-        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND created_at >= datetime('now', '-7 days')";
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND created_at >= DATEADD(DAY, -7, CURRENT_TIMESTAMP)";
         try (Connection conn = db.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
@@ -210,7 +210,7 @@ public class PersonDao {
     }
 
     public int countAddedLastWeek() {
-        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND created_at >= datetime('now', '-14 days') AND created_at < datetime('now', '-7 days')";
+        String sql = "SELECT COUNT(*) FROM person WHERE is_deleted = 0 AND created_at >= DATEADD(DAY, -14, CURRENT_TIMESTAMP) AND created_at < DATEADD(DAY, -7, CURRENT_TIMESTAMP)";
         try (Connection conn = db.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
